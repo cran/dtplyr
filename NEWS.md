@@ -1,3 +1,9 @@
+# dtplyr 0.0.2
+
+- This is a compatibility release. It makes dtplyr compatible with
+  dplyr 0.6.0 in addition to dplyr 0.5.0.
+
+
 # dtplyr 0.0.1
 
 - `distinct()` gains `.keep_all` argument (#30, #31).
