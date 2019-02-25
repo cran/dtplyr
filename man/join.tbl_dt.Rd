@@ -5,40 +5,48 @@
 \alias{inner_join.data.table}
 \alias{left_join.data.table}
 \alias{right_join.data.table}
+\alias{full_join.data.table}
 \alias{semi_join.data.table}
 \alias{anti_join.data.table}
-\alias{full_join.data.table}
 \title{Join data table tbls.}
 \usage{
-\method{inner_join}{data.table}(x, y, by = NULL, copy = FALSE, ...)
+inner_join.data.table(x, y, by = NULL, copy = FALSE, suffix = c(".x",
+  ".y"), ...)
 
-\method{left_join}{data.table}(x, y, by = NULL, copy = FALSE, ...)
+left_join.data.table(x, y, by = NULL, copy = FALSE, suffix = c(".x",
+  ".y"), ...)
 
-\method{right_join}{data.table}(x, y, by = NULL, copy = FALSE, ...)
+right_join.data.table(x, y, by = NULL, copy = FALSE, suffix = c(".x",
+  ".y"), ...)
 
-\method{semi_join}{data.table}(x, y, by = NULL, copy = FALSE, ...)
+full_join.data.table(x, y, by = NULL, copy = FALSE, suffix = c(".x",
+  ".y"), ...)
 
-\method{anti_join}{data.table}(x, y, by = NULL, copy = FALSE, ...)
+semi_join.data.table(x, y, by = NULL, copy = FALSE, ...)
 
-\method{full_join}{data.table}(x, y, by = NULL, copy = FALSE, ...)
+anti_join.data.table(x, y, by = NULL, copy = FALSE, ...)
 }
 \arguments{
 \item{x, y}{tbls to join}
 
 \item{by}{a character vector of variables to join by.  If \code{NULL}, the
-  default, \code{join} will do a natural join, using all variables with
-  common names across the two tables. A message lists the variables so
-  that you can check they're right (to suppress the message, simply
-  explicitly list the variables that you want to join).
+default, \code{*_join()} will do a natural join, using all variables with
+common names across the two tables. A message lists the variables so
+that you can check they're right (to suppress the message, simply
+explicitly list the variables that you want to join).
 
-  To join by different variables on x and y use a named vector.
-  For example, \code{by = c("a" = "b")} will match \code{x.a} to
-  \code{y.b}.}
+To join by different variables on x and y use a named vector.
+For example, \code{by = c("a" = "b")} will match \code{x.a} to
+\code{y.b}.}
 
 \item{copy}{If \code{x} and \code{y} are not from the same data source,
 and \code{copy} is \code{TRUE}, then \code{y} will be copied into the
 same src as \code{x}.  This allows you to join tables across srcs, but
 it is a potentially expensive operation so you must opt into it.}
+
+\item{suffix}{If there are non-joined duplicate variables in \code{x} and
+\code{y}, these suffixes will be added to the output to disambiguate them.
+Should be a character vector of length 2.}
 
 \item{...}{Included for compatibility with generic; otherwise ignored.}
 }
