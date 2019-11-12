@@ -6,23 +6,24 @@
 \alias{dtplyr-package}
 \title{dtplyr: Data Table Back-End for 'dplyr'}
 \description{
-This implements the data table back-end for 'dplyr' so that you
-    can seamlessly use data table and 'dplyr' together.
+Provides a data.table backend for 'dplyr'. The goal of 'dtplyr' 
+    is to allow you to write 'dplyr' code that is automatically translated to 
+    the equivalent, but usually much faster, data.table code.
 }
 \seealso{
 Useful links:
 \itemize{
-  \item \url{https://github.com/hadley/dtplyr}
-  \item Report bugs at \url{https://github.com/hadley/dtplyr/issues}
+  \item \url{https://github.com/tidyverse/dtplyr}
+  \item Report bugs at \url{https://github.com/tidyverse/dtplyr/issues}
 }
 
 }
 \author{
-\strong{Maintainer}: Lionel Henry \email{lionel@rstudio.com}
+\strong{Maintainer}: Hadley Wickham \email{hadley@rstudio.com}
 
 Authors:
 \itemize{
-  \item Hadley Wickham \email{hadley@rstudio.com}
+  \item Lionel Henry \email{lionel@rstudio.com}
 }
 
 Other contributors:
