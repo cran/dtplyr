@@ -51,6 +51,12 @@ groups.dtplyr_step <- function(x) {
   syms(x$groups)
 }
 
+#' @importFrom dplyr group_vars
+#' @export
+group_vars.dtplyr_step <- function(x) {
+  x$groups
+}
+
 #' @importFrom dplyr group_size
 #' @export
 group_size.dtplyr_step <- function(x) {
@@ -117,7 +123,9 @@ as.data.frame.dtplyr_step <- function(x, ...) {
 #' @export
 #' @importFrom tibble as_tibble
 as_tibble.dtplyr_step <- function(x, ...) {
-  as_tibble(dt_eval(x))
+  out <- as_tibble(dt_eval(x))
+  attr(out, ".internal.selfref") <- NULL
+  out
 }
 
 #' @export
@@ -146,6 +154,12 @@ print.dtplyr_step <- function(x, ...) {
   invisible(x)
 }
 
+#' @importFrom dplyr glimpse
+#' @export
+glimpse.dtplyr_step <- function(x, width = NULL, ...) {
+  glimpse(collect(x), width = width, ...)
+}
+
 #' @importFrom dplyr show_query
 #' @export
 show_query.dtplyr_step <- function(x) {
@@ -154,6 +168,15 @@ show_query.dtplyr_step <- function(x) {
 
 is_step <- function(x) inherits(x, "dtplyr_step")
 
+
+#' Single table operations
+#'
+#' This documents differences between standard dplyr verbs and their
+#' data.table instantiation.
+#'
+#' @order 1
+#' @name single_table
+NULL
 
 # Returns a named list of data.tables: most just dispatch to their
 # parent. The only exceptions are dt_step_first() and the two-table verbs.

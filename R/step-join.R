@@ -7,7 +7,7 @@ step_join <- function(x, y, on, style, suffix = c(".x", ".y")) {
   if (style %in% c("semi", "anti")) {
     vars <- x$vars
   } else {
-    vars <- union(x$vars, y$vars)
+    vars <- join_vars(x$vars, y$vars, on, suffix)
   }
 
   new_step(
@@ -57,17 +57,11 @@ dt_call.dtplyr_step_join <- function(x, needs_copy = x$needs_copy) {
 #' @importFrom dplyr left_join
 #' @export
 left_join.dtplyr_step <- function(x, y, ..., by = NULL, copy = FALSE, suffix = c(".x", ".y")) {
-  by <- dtplyr_common_by(by, x, y)
   y <- dtplyr_auto_copy(x, y, copy = copy)
+  by <- dtplyr_common_by(by, x, y)
 
-  common_vars <- setdiff(intersect(x$vars, y$vars), by)
-  if (length(common_vars) == 0) {
-    step_subset(
-      y,
-      vars = union(x$vars, y$vars),
-      i = x,
-      on = by
-    )
+  if (join_is_simple(x$vars, y$vars, by)) {
+    step_subset(y, vars = union(x$vars, y$vars), i = x, on = by)
   } else {
     step_join(x, y, on = by, style = "left", suffix = suffix)
   }
@@ -76,17 +70,11 @@ left_join.dtplyr_step <- function(x, y, ..., by = NULL, copy = FALSE, suffix = c
 #' @importFrom dplyr right_join
 #' @export
 right_join.dtplyr_step <- function(x, y, ..., by = NULL, copy = FALSE, suffix = c(".x", ".y")) {
-  by <- dtplyr_common_by(by, y, x)
   y <- dtplyr_auto_copy(x, y, copy = copy)
+  by <- dtplyr_common_by(by, y, x)
 
-  common_vars <- setdiff(intersect(x$vars, y$vars), by)
-  if (length(common_vars) == 0) {
-    step_subset(
-      x,
-      vars = union(x$vars, y$vars),
-      i = y,
-      on = by
-    )
+  if (join_is_simple(x$vars, y$vars, by)) {
+    step_subset(x, vars = union(x$vars, y$vars), i = y, on = by)
   } else {
     step_join(y, x, on = by, style = "left", suffix = suffix)
   }
@@ -95,8 +83,8 @@ right_join.dtplyr_step <- function(x, y, ..., by = NULL, copy = FALSE, suffix = 
 #' @importFrom dplyr inner_join
 #' @export
 inner_join.dtplyr_step <- function(x, y, ..., by = NULL, copy = FALSE, suffix = c(".x", ".y")) {
-  by <- dtplyr_common_by(by, x, y)
   y <- dtplyr_auto_copy(x, y, copy = copy)
+  by <- dtplyr_common_by(by, x, y)
 
   step_join(x, y, on = by, style = "inner", suffix = suffix)
 }
@@ -104,8 +92,8 @@ inner_join.dtplyr_step <- function(x, y, ..., by = NULL, copy = FALSE, suffix = 
 #' @importFrom dplyr full_join
 #' @export
 full_join.dtplyr_step <- function(x, y, ..., by = NULL, copy = FALSE, suffix = c(".x", ".y")) {
-  by <- dtplyr_common_by(by, x, y)
   y <- dtplyr_auto_copy(x, y, copy = copy)
+  by <- dtplyr_common_by(by, x, y)
 
   step_join(x, y, on = by, style = "full", suffix = suffix)
 }
@@ -113,8 +101,8 @@ full_join.dtplyr_step <- function(x, y, ..., by = NULL, copy = FALSE, suffix = c
 #' @importFrom dplyr anti_join
 #' @export
 anti_join.dtplyr_step <- function(x, y, ..., by = NULL, copy = FALSE) {
-  by <- dtplyr_common_by(by, x, y)
   y <- dtplyr_auto_copy(x, y, copy = copy)
+  by <- dtplyr_common_by(by, x, y)
 
   step_join(x, y, on = by, style = "anti")
 }
@@ -122,8 +110,8 @@ anti_join.dtplyr_step <- function(x, y, ..., by = NULL, copy = FALSE) {
 #' @importFrom dplyr semi_join
 #' @export
 semi_join.dtplyr_step <- function(x, y, ..., by = NULL, copy = FALSE) {
-  by <- dtplyr_common_by(by, x, y)
   y <- dtplyr_auto_copy(x, y, copy = copy)
+  by <- dtplyr_common_by(by, x, y)
 
   step_join(x, y, on = by, style = "semi")
 }
@@ -143,6 +131,27 @@ dtplyr_auto_copy <- function(x, y, copy = copy) {
   } else {
     dplyr::auto_copy(x, y, copy = copy)
   }
+}
+
+join_is_simple <- function(x, y, by) {
+  if (is_named(by)) {
+    return(FALSE)
+  }
+
+  common_vars <- setdiff(intersect(x, y), by)
+  length(common_vars) == 0
+}
+
+join_vars <- function(x, y, on, suffixes) {
+  y <- setdiff(y, if (is_named(on)) names(on) else on)
+  vars <- union(x, y)
+
+  both <- intersect(x, y)
+  if (length(both) > 0) {
+    vars <- c(setdiff(vars, both), paste0(both, suffixes[[1]]), paste0(both, suffixes[[2]]))
+  }
+
+  vars
 }
 
 #' @importFrom dplyr same_src
