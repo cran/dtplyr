@@ -1,11 +1,16 @@
 # nocov start
 .onLoad <- function(...) {
   register_s3_method("dplyr", "filter", "data.table")
+  register_s3_method("dplyr", "intersect", "data.table")
+  register_s3_method("dplyr", "setdiff", "data.table")
+  register_s3_method("dplyr", "union", "data.table")
+  register_s3_method("tidyr", "pivot_wider", "data.table")
 
   register_s3_method("dplyr", "filter", "dtplyr_step")
   register_s3_method("dplyr", "intersect", "dtplyr_step")
   register_s3_method("dplyr", "setdiff", "dtplyr_step")
   register_s3_method("dplyr", "union", "dtplyr_step")
+  register_s3_method("tidyr", "pivot_wider", "dtplyr_step")
 }
 
 register_s3_method <- function(pkg, generic, class, fun = NULL) {

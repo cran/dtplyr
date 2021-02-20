@@ -45,7 +45,7 @@ test_that("generates single calls as expect", {
 
   expect_equal(
     dt %>% group_by(x) %>% mutate(x2 = x * 2) %>% show_query(),
-    expr(copy(DT)[, `:=`(x2 = x * 2), keyby = .(x)])
+    expr(copy(DT)[, `:=`(x2 = x * 2), by = .(x)])
   )
 
   expect_equal(
@@ -64,6 +64,15 @@ test_that("mutate generates compound expression if needed", {
       x4 <- x2 * 2
       .(x2, x4)
     }])
+  )
+})
+
+test_that("can use across", {
+  dt <- lazy_dt(data.table(x = 1, y = 2), "DT")
+
+  expect_equal(
+    dt %>% mutate(across(everything(), ~ . + 1)) %>% show_query(),
+    expr(copy(DT)[, `:=`(x = x + 1, y = y + 1)])
   )
 })
 
