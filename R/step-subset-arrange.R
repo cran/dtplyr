@@ -25,6 +25,13 @@ arrange.dtplyr_step <- function(.data, ..., .by_group = FALSE) {
   }
 
   # Order without grouping then restore
+  dots <- set_names(dots, NULL)
   step <- step_subset(.data, i = call2("order", !!!dots), groups = character())
   step_group(step, groups = .data$groups)
+}
+
+#' @export
+arrange.data.table <- function(.data, ..., .by_group = FALSE) {
+  .data <- lazy_dt(.data)
+  arrange(.data, ..., .by_group = .by_group)
 }

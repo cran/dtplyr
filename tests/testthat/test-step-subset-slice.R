@@ -7,12 +7,12 @@ test_that("can slice", {
     expr(DT)
   )
   expect_equal(
-    dt %>% slice(1:4) %>% show_query(),
-    expr(DT[1:4])
+    dt %>% slice(c(1, 2)) %>% show_query(),
+    expr(DT[c(1, 2)[between(c(1, 2), -.N, .N)]])
   )
   expect_equal(
     dt %>% slice(1, 2, 3) %>% show_query(),
-    expr(DT[c(1, 2, 3)])
+    expr(DT[c(1, 2, 3)[between(c(1, 2, 3), -.N, .N)]])
   )
 })
 
@@ -22,7 +22,7 @@ test_that("can slice when grouped", {
 
   expect_equal(
     dt2 %>% show_query(),
-    expr(DT[DT[, .I[1], by = .(x)]$V1])
+    expr(DT[DT[, .I[1[between(1, -.N, .N)]], by = .(x)]$V1])
   )
   expect_equal(as_tibble(dt2), tibble(x = c(1, 2), y = c(1, 3)))
 })
@@ -32,6 +32,14 @@ test_that("slicing doesn't sorts groups", {
   expect_equal(
     dt %>% group_by(x) %>% slice(1) %>% pull(x),
     2:1
+  )
+})
+
+test_that("doesn't return excess rows, #10", {
+  dt <- lazy_dt(data.table(x = 1:2))
+  expect_equal(
+    dt %>% slice(1:3) %>% pull(x),
+    1:2
   )
 })
 
@@ -45,6 +53,11 @@ test_that("functions silently truncate results", {
   expect_equal(dt %>% slice_sample(n = 6) %>% as_tibble() %>% nrow(), 5)
   expect_equal(dt %>% slice_min(x, n = 6) %>% as_tibble() %>% nrow(), 5)
   expect_equal(dt %>% slice_max(x, n = 6) %>% as_tibble() %>% nrow(), 5)
+  expect_equal(dt %>% slice_head(n = -6) %>% as_tibble() %>% nrow(), 0)
+  expect_equal(dt %>% slice_tail(n = -6) %>% as_tibble() %>% nrow(), 0)
+  expect_equal(dt %>% slice_sample(n = -6) %>% as_tibble() %>% nrow(), 0)
+  expect_equal(dt %>% slice_min(x, n = -6) %>% as_tibble() %>% nrow(), 0)
+  expect_equal(dt %>% slice_max(x, n = -6) %>% as_tibble() %>% nrow(), 0)
 })
 
 test_that("proportion rounds down", {
@@ -68,13 +81,24 @@ test_that("min and max return ties by default", {
   expect_equal(dt %>% slice_max(x, with_ties = FALSE) %>% collect() %>% nrow(), 1)
 })
 
-test_that("min and max reorder results", {
+test_that("min and max work with character", {
+  dt <- lazy_dt(data.table(x = c("b", "a", "d", "c")))
+  expect_equal(dt %>% slice_min(x) %>% pull(x), "a")
+  expect_equal(dt %>% slice_max(x) %>% pull(x), "d")
+})
+
+test_that("min and max reorder results and auto-convert data.tables", {
   dt <- lazy_dt(data.frame(id = 1:4, x = c(2, 3, 1, 2)))
 
   expect_equal(dt %>% slice_min(x, n = 2) %>% pull(id), c(3, 1, 4))
   expect_equal(dt %>% slice_min(x, n = 2, with_ties = FALSE) %>% pull(id), c(3, 1))
   expect_equal(dt %>% slice_max(x, n = 2) %>% pull(id), c(2, 1, 4))
   expect_equal(dt %>% slice_max(x, n = 2, with_ties = FALSE) %>% pull(id), c(2, 1))
+
+  dt <- data.table(id = 1:4, x = c(2, 3, 1, 2))
+
+  expect_equal(dt %>% slice_min(x, n = 2) %>% pull(id), c(3, 1, 4))
+  expect_equal(dt %>% slice_max(x, n = 2) %>% pull(id), c(2, 1, 4))
 })
 
 test_that("min and max ignore NA's (#4826)", {
@@ -105,14 +129,73 @@ test_that("slice_*() checks for empty ...", {
   expect_error(slice_max(dt), "missing")
 })
 
+test_that("slice_*() checks for constant n= and prop=", {
+  dt <- lazy_dt(data.frame(x = 1:10))
+  expect_error(slice_head(dt, n = n()), "constant")
+  expect_error(slice_head(dt, prop = n()), "constant")
+  expect_error(slice_tail(dt, n = n()), "constant")
+  expect_error(slice_tail(dt, prop = n()), "constant")
+  expect_error(slice_min(dt, x, n = n()), "constant")
+  expect_error(slice_min(dt, x, prop = n()), "constant")
+  expect_error(slice_max(dt, x, n = n()), "constant")
+  expect_error(slice_max(dt, x, prop = n()), "constant")
+  expect_error(slice_sample(dt, n = n()), "constant")
+  expect_error(slice_sample(dt, prop = n()), "constant")
+})
+
 test_that("check_slice_catches common errors", {
   expect_snapshot(error = TRUE, {
     check_slice_size(n = 1, prop = 1)
     check_slice_size(n = "a")
     check_slice_size(prop = "a")
-    check_slice_size(n = -1)
-    check_slice_size(prop = -1)
+    check_slice_size(n = NA)
+    check_slice_size(prop = NA)
   })
+})
+
+test_that("slice_head/slice_tail correctly slice ungrouped dt when n < 0", {
+  dt <- lazy_dt(data.frame(x = 1:10))
+
+  expect_equal(
+    slice_head(dt, n = -2) %>% as_tibble(),
+    slice_head(dt, n = nrow(dt) - 2) %>% as_tibble()
+  )
+  expect_equal(
+    slice_tail(dt, n = -2) %>% as_tibble(),
+    slice_tail(dt, n = nrow(dt) - 2) %>% as_tibble()
+  )
+})
+
+test_that("slice_head/slice_tail correctly slice grouped dt when n < 0", {
+  dt <-
+    data.frame(x = 1:10, g = c(rep(1, 8), rep(2, 2))) %>%
+    lazy_dt() %>%
+    group_by(g)
+
+  expect_equal(
+    slice_head(dt, n = -3) %>% as_tibble(),
+    slice(dt, rlang::seq2(1L, n() - 3)) %>% as_tibble()
+  )
+  expect_equal(
+    n_groups(slice_head(dt, n = -3)),
+    1L
+  )
+  expect_equal(
+    slice_tail(dt, n = -3) %>% as_tibble(),
+    slice(dt, rlang::seq2(3 + 1, n())) %>% as_tibble()
+  )
+  expect_equal(
+    n_groups(slice_tail(dt, n = -3)),
+    1L
+  )
+
+})
+
+test_that("Non-integer number of rows computed correctly", {
+  expect_equal(eval_tidy(get_slice_size(n = 1.6), list(.N = 10)), 1)
+  expect_equal(eval_tidy(get_slice_size(prop = 0.16), list(.N = 10)), 1)
+  expect_equal(eval_tidy(get_slice_size(n = -1.6), list(.N = 10)), 9)
+  expect_equal(eval_tidy(get_slice_size(prop = -0.16), list(.N = 10)), 9)
 })
 
 

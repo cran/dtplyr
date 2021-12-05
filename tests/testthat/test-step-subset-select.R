@@ -41,6 +41,7 @@ test_that("empty select returns no columns", {
   )
 
   # unless it's grouped
+  skip_if(utils::packageVersion("rlang") < "0.5.0")
   expect_snapshot(out <- lz %>% group_by(x) %>% select())
   expect_equal(
     out %>% collect(),
@@ -53,4 +54,8 @@ test_that("vars set correctly", {
   expect_equal(dt %>% select(a = x, y) %>% .$vars, c("a", "y"))
 })
 
-
+test_that("only add step if necessary", {
+  dt <- lazy_dt(data.frame(x = 1:3, y = 1:3), "DT")
+  expect_equal(dt %>% select(everything()), dt)
+  expect_equal(dt %>% select(x, y), dt)
+})

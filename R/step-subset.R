@@ -5,12 +5,14 @@ step_subset <- function(parent,
                         arrange = parent$arrange,
                         i = NULL,
                         j = NULL,
-                        on = character()
-                        ) {
+                        on = character(),
+                        allow_cartesian = NULL,
+                        needs_copy = FALSE
+) {
 
   stopifnot(is_step(parent))
-  stopifnot(is.null(i) || is_expression(i) || is_step(i))
-  stopifnot(is.null(j) || is_expression(j))
+  stopifnot(is_expression(i) || is_call(i) || is_step(i))
+  stopifnot(is_expression(j) || is_call(j))
   stopifnot(is.character(on))
 
   new_step(
@@ -22,13 +24,19 @@ step_subset <- function(parent,
     i = i,
     j = j,
     on = on,
+    allow_cartesian = allow_cartesian,
     implicit_copy = !is.null(i) || !is.null(j),
+    needs_copy = needs_copy || parent$needs_copy,
     class = "dtplyr_step_subset"
   )
 }
 
 # Grouped i needs an intermediate assignment for maximum efficiency
 step_subset_i <- function(parent, i) {
+  if (is_empty(i)) {
+    return(parent)
+  }
+
   if (length(parent$groups) > 0) {
     parent <- compute(parent)
 
@@ -117,7 +125,7 @@ dt_call.dtplyr_step_subset <- function(x, needs_copy = x$needs_copy) {
 
   if (length(x$on) > 0) {
     out$on <- call2(".", !!!syms(x$on))
-    out$allow.cartesian <- TRUE
+    out$allow.cartesian <- x$allow_cartesian
   }
   out
 }

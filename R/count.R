@@ -21,20 +21,27 @@ count.dtplyr_step <- function(.data, ..., wt = NULL, sort = FALSE, name = NULL) 
     out <- .data
   }
 
-  wt <- enexpr(wt)
-  if (is.null(wt)) {
+  tally(out, wt = !!enquo(wt), sort = sort, name = name)
+}
+
+#' @export
+count.data.table <- function(.data, ...) {
+  .data <- lazy_dt(.data)
+  count(.data, ...)
+}
+
+#' @importFrom dplyr tally
+#' @export
+tally.dtplyr_step <- function(.data, wt = NULL, sort = FALSE, name = NULL) {
+  wt <- enquo(wt)
+  if (quo_is_null(wt)) {
     n <- expr(n())
   } else {
     n <- expr(sum(!!wt, na.rm = TRUE))
   }
+  name <- check_name(name, .data$groups)
 
-  if (is.null(name)) {
-    name <- "n"
-  } else if (!is_string(name)) {
-    abort("`name` must be a string")
-  }
-
-  out <- summarise(out, !!name := !!n)
+  out <- summarise(.data, !!name := !!n)
 
   if (sort) {
     out <- arrange(out, desc(!!sym(name)))
@@ -42,3 +49,38 @@ count.dtplyr_step <- function(.data, ..., wt = NULL, sort = FALSE, name = NULL) 
 
   out
 }
+
+#' @export
+tally.data.table <- function(.data, ...) {
+  .data <- lazy_dt(.data)
+  tally(.data, ...)
+}
+
+# Helpers -----------------------------------------------------------------
+
+check_name <- function(name, vars) {
+  if (is.null(name)) {
+    name <- n_name(vars)
+
+    if (name != "n") {
+      inform(c(
+        glue::glue("Storing counts in `{name}`, as `n` already present in input"),
+        i = "Use `name = \"new_name\"` to pick a new name."
+      ))
+    }
+  } else if (!is_string(name)) {
+    abort("`name` must be a string")
+  }
+
+  name
+}
+
+n_name <- function(x) {
+  name <- "n"
+  while (name %in% x) {
+    name <- paste0("n", name)
+  }
+
+  name
+}
+

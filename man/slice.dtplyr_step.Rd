@@ -28,9 +28,13 @@ integers giving rows to drop.}
 proportion of rows to select. If neither are supplied, \code{n = 1} will be
 used.
 
+If a negative value of \code{n} or \code{prop} is provided, the specified number or
+proportion of rows will be removed.
+
 If \code{n} is greater than the number of rows in the group (or \code{prop > 1}),
 the result will be silently truncated to the group size. If the
-\code{prop}ortion of a group size is not an integer, it is rounded down.}
+\code{prop}ortion of a group size does not yield an integer number of rows, the
+absolute value of \code{prop*n()} is rounded down.}
 
 \item{order_by}{Variable or function of variables to order by.}
 
@@ -40,9 +44,8 @@ and return the first \code{n} rows.}
 }
 \description{
 These are methods for the dplyr \code{\link[=slice]{slice()}}, \code{slice_head()}, \code{slice_tail()},
-\code{slice_min()}, \code{slice_max()} and \code{slice_sample()} generics. \code{slice()}
-and \code{slice_sample()} are translated to the \code{i} argument of \verb{[.data.table},
-all others are translated to the \code{j} argument.
+\code{slice_min()}, \code{slice_max()} and \code{slice_sample()} generics. They are
+translated to the \code{i} argument of \verb{[.data.table}.
 
 Unlike dplyr, \code{slice()} (and \code{slice()} alone) returns the same number of
 rows per group, regardless of whether or not the indices appear in each

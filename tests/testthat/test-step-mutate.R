@@ -67,6 +67,19 @@ test_that("mutate generates compound expression if needed", {
   )
 })
 
+test_that("allows multiple assignment to the same variable", {
+  dt <- lazy_dt(data.table(x = 1, y = 2), "DT")
+
+  expect_equal(
+    dt %>% mutate(x = x * 2, x = x * 2) %>% show_query(),
+    expr(copy(DT)[, c("x") := {
+      x <- x * 2
+      x <- x * 2
+      .(x)
+    }])
+  )
+})
+
 test_that("can use across", {
   dt <- lazy_dt(data.table(x = 1, y = 2), "DT")
 
@@ -74,14 +87,45 @@ test_that("can use across", {
     dt %>% mutate(across(everything(), ~ . + 1)) %>% show_query(),
     expr(copy(DT)[, `:=`(x = x + 1, y = y + 1)])
   )
+
+  expect_equal(
+    dt %>% mutate(across(.fns = ~ . + 1)) %>% show_query(),
+    expr(copy(DT)[, `:=`(x = x + 1, y = y + 1)])
+  )
 })
 
 test_that("vars set correctly", {
   dt <- lazy_dt(data.frame(x = 1:3, y = 1:3))
   expect_equal(dt %>% mutate(z = 1) %>% .$vars, c("x", "y", "z"))
+  expect_equal(dt %>% mutate(x = NULL, z = 1) %>% .$vars, c("y", "z"))
 })
 
 test_that("emtpy mutate returns input", {
   dt <- lazy_dt(data.frame(x = 1))
   expect_equal(mutate(dt), dt)
+  expect_equal(mutate(dt, !!!list()), dt)
+})
+
+# .before and .after -----------------------------------------------------------
+
+test_that("can use .before and .after to control column position", {
+  dt <- lazy_dt(data.frame(x = 1, y = 2))
+  expect_named(
+    mutate(dt, z = 1) %>% as_tibble(),
+    c("x", "y", "z")
+  )
+  expect_named(
+    mutate(dt, z = 1, .before = x) %>% as_tibble(),
+    c("z", "x", "y")
+  )
+  expect_named(
+    mutate(dt, z = 1, .after = x) %>% as_tibble(),
+    c("x", "z", "y")
+  )
+
+  # but doesn't affect order of existing columns
+  expect_named(
+    mutate(dt, x = 1, .after = y) %>% as_tibble(),
+    c("x", "y")
+  )
 })

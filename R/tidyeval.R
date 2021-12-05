@@ -14,9 +14,9 @@ dt_eval <- function(x) {
 # Make sure data.table functions are available so dtplyr still works
 # even when data.table isn't attached
 dt_funs <- c(
-  "copy", "dcast",
-  "fcase", "fintersect", "frank", "frankv", "fsetdiff", "funion",
-  "setcolorder", "setnames"
+  "between", "CJ", "copy", "data.table", "dcast", "melt", "nafill",
+  "fcase", "fcoalesce", "fifelse", "fintersect", "frank", "frankv", "fsetdiff", "funion",
+  "setcolorder", "setnames", "shift", "tstrsplit", "uniqueN"
 )
 add_dt_wrappers <- function(env) {
   env_bind(env, !!!env_get_list(ns_env("data.table"), dt_funs))
@@ -104,16 +104,16 @@ dt_squash_call <- function(x, env, data, j = TRUE) {
     } else if (is_symbol(x[[2]], ".env")) {
       sym(paste0("..", var))
     }
-  } else if (is_call(x, "coalesce")) {
-    x[[1L]] <- quote(fcoalesce)
-    x
+  } else if (is_call(x, c("coalesce", "replace_na"))) {
+    args <- lapply(x[-1], dt_squash, env = env, data = data, j = j)
+    call2("fcoalesce", !!!args)
   } else if (is_call(x, "case_when")) {
     # case_when(x ~ y) -> fcase(x, y)
     args <- unlist(lapply(x[-1], function(x) {
       list(
         # Get as "default" case as close as possible
         # https://github.com/Rdatatable/data.table/issues/4258
-        if (isTRUE(x[[2]])) quote(rep(TRUE, .N)) else x[[2]],
+        if (isTRUE(x[[2]]) || is_symbol(x[[2]], "T")) quote(rep(TRUE, .N)) else x[[2]],
         x[[3]]
       )
     }))
@@ -129,11 +129,62 @@ dt_squash_call <- function(x, env, data, j = TRUE) {
     quote(.GRP)
   } else if (is_call(x, "cur_group_rows")) {
     quote(.I)
-  } else if (is_call(x, "if_else")) {
-    x[[1L]] <- quote(fifelse)
+  } else if (is_call(x, "desc")) {
+      if (!has_length(x, 2L)) {
+        abort("`desc()` expects exactly one argument.")
+      }
+    x[[1]] <- sym("-")
+    x[[2]] <- get_expr(x[[2]])
     x
+  } else if (is_call(x, c("if_else", "ifelse"))) {
+    if (is_call(x, "if_else")) {
+      x <- unname(match.call(dplyr::if_else, x))
+    } else {
+      x <- unname(match.call(ifelse, x))
+    }
+
+    x[[1]] <- quote(fifelse)
+    x[-1] <- lapply(x[-1], dt_squash, env, data, j = j)
+    x
+  } else if (is_call(x, c("lag", "lead"))) {
+    if (is_call(x, "lag")) {
+      type <- "lag"
+      call <- match.call(dplyr::lag, x)
+    } else {
+      type <- "lead"
+      call <- match.call(dplyr::lead, x)
+    }
+    call[-1] <- lapply(call[-1], dt_squash, env = env, data = data, j = j)
+
+    shift_call <- call2("shift", x[[2]])
+    if (!is_null(call$n)) {
+      shift_call$n <- call$n
+    }
+    if (!is_null(call$default)) {
+      shift_call$fill <- call$default
+    }
+    if (!is_null(call$order_by)) {
+      abort(
+        glue::glue("The `order_by` argument of `{type}()` is not supported by dtplyr")
+      )
+    }
+    shift_call$type <- type
+    shift_call
   } else if (is_call(x, "n", n = 0)) {
     quote(.N)
+  } else if (is_call(x, "n_distinct")) {
+    x <- match.call(dplyr::n_distinct, x, expand.dots = FALSE)
+    dots <- x$...
+    if (length(dots) == 1) {
+      vec <- dots[[1]]
+    } else {
+      vec <- call2("data.table", !!!dots)
+    }
+    call <- call2("uniqueN", vec)
+    if (!is_null(x$na.rm)) {
+      call$na.rm <- x$na.rm
+    }
+    call
   } else if (is_call(x, "row_number", n = 0)) {
     quote(seq_len(.N))
   } else if (is_call(x, "row_number", n = 1)) {

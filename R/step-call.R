@@ -74,25 +74,7 @@ rename.dtplyr_step <- function(.data, ...) {
   sim_data <- simulate_vars(.data)
   locs <- tidyselect::eval_rename(expr(c(...)), sim_data)
 
-  new_vars <- .data$vars
-  new_vars[locs] <- names(locs)
-
-  vars <- set_names(.data$vars[locs], names(locs))
-  vars <- vars[vars != names(vars)]
-
-  if (length(vars) == 0) {
-    return(.data)
-  }
-
-  out <- step_call(.data,
-    "setnames",
-    args = list(unname(vars), names(vars)),
-    vars = new_vars,
-    in_place = TRUE
-  )
-
-  groups <- rename_groups(.data$groups, vars)
-  step_group(out, groups)
+  step_setnames(.data, .data$vars[locs], names(locs), in_place = TRUE, rename_groups = TRUE)
 }
 
 
@@ -230,4 +212,42 @@ unique.dtplyr_step <- function(x, incomparables = FALSE, ...) {
     abort("`incomparables` not supported by `unique.dtplyr_step()`")
   }
   distinct(x)
+}
+
+# tidyr verbs -------------------------------------------------------------
+#' Drop rows containing missing values
+#'
+#' @description
+#' This is a method for the tidyr `drop_na()` generic. It is translated to
+#' `data.table::na.omit()`
+#'
+#' @param data A [lazy_dt()].
+#' @inheritParams tidyr::drop_na
+#' @examples
+#' library(dplyr)
+#' library(tidyr)
+#'
+#' dt <- lazy_dt(tibble(x = c(1, 2, NA), y = c("a", NA, "b")))
+#' dt %>% drop_na()
+#' dt %>% drop_na(x)
+#'
+#' vars <- "y"
+#' dt %>% drop_na(x, any_of(vars))
+# exported onLoad
+drop_na.dtplyr_step <- function(data, ...) {
+  sim_data <- simulate_vars(data)
+  locs <- names(tidyselect::eval_select(expr(c(...)), sim_data))
+
+  args <- list()
+  if (length(locs) > 0) {
+    args$cols <- locs
+  }
+
+  step_call(data, "na.omit", args = args)
+}
+
+# exported onLoad
+drop_na.data.table <- function(data, ...) {
+  data <- lazy_dt(data)
+  tidyr::drop_na(data, ...)
 }

@@ -21,6 +21,20 @@ test_that("can filter by value", {
   )
 })
 
+test_that("can filter with logical columns", {
+  dt <- lazy_dt(data.table(x = c(TRUE, FALSE)), "DT")
+
+  expect_equal(
+    dt %>% filter(x) %>% show_query(),
+    expr(DT[(x)])
+  )
+
+  expect_equal(
+    dt %>% filter(!x) %>% show_query(),
+    expr(DT[(!x)])
+  )
+})
+
 
 test_that("inlines external variables", {
   dt <- lazy_dt(data.table(x = 1), "DT")
@@ -53,6 +67,15 @@ test_that("can use with across", {
     expr(DT[x > 0 | y > 0])
   )
 
+  # .cols defaults to everything()
+  expect_equal(
+    dt %>% filter(if_all(.fns = ~ . > 0)) %>% show_query(),
+    expr(DT[x > 0 & y > 0 & z > 0])
+  )
+  expect_equal(
+    dt %>% filter(if_any(.fns = ~ . > 0)) %>% show_query(),
+    expr(DT[x > 0 | y > 0 | z > 0])
+  )
 })
 
 test_that("can filter when grouped", {
@@ -76,4 +99,32 @@ test_that("grouped filter doesn't reorder", {
     expr(DT[DT[, .I[TRUE], by = .(x)]$V1])
   )
   expect_equal(dt2 %>% as_tibble(), as_tibble(dt1))
+})
+
+test_that("only adds step if dots are not empty", {
+  dt <- lazy_dt(data.table(x = 1), "DT")
+
+  expect_equal(dt %>% filter(), dt)
+  expect_equal(dt %>% filter(!!!list()), dt)
+})
+
+test_that("errors for named input", {
+  dt <- lazy_dt(data.table(x = 1, y = 2), "DT")
+
+  expect_snapshot(error = TRUE, filter(dt, x = 1))
+  expect_snapshot(error = TRUE, filter(dt, y > 1, x = 1))
+})
+
+test_that("allows named constants that resolve to logical vectors", {
+  dt <- lazy_dt(mtcars, "DT")
+  filters <- mtcars %>%
+    transmute(
+      cyl %in% 6:8,
+      hp / drat > 50
+    )
+
+  expect_equal(
+    filter(dt, !!!filters),
+    filter(dt, !!!unname(filters))
+  )
 })

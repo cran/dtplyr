@@ -74,6 +74,7 @@ pivot_wider.dtplyr_step <- function(data,
     new_vars <- unique(pull(new_vars, .names_from))
   } else {
     new_vars <- unique(pull(data, !!sym(names_from)))
+    new_vars <- as.character(new_vars)
   }
 
   if (!is.null(names_glue)) {
@@ -127,26 +128,13 @@ pivot_wider.dtplyr_step <- function(data,
   }
 
   if (!is.null(names_glue)) {
-    out <- step_call(
-      out,
-      "setnames",
-      args = list(old = new_vars, new = glue_vars),
-      vars = c(id_cols, glue_vars),
-      in_place = FALSE
-    )
+    out <- step_setnames(out, new_vars, glue_vars, in_place = FALSE)
 
     # In case of names_sort = TRUE
     new_vars <- glue_vars
   } else if (nchar(names_prefix) > 0) {
     new_names <- paste0(names_prefix, new_vars)
-
-    out <- step_call(
-      out,
-      "setnames",
-      args = list(old = new_vars, new = new_names),
-      vars = c(id_cols, new_names),
-      in_place = FALSE
-    )
+    out <- step_setnames(out, new_vars, new_names, in_place = FALSE)
 
     # In case of names_sort = TRUE
     new_vars <- new_names
@@ -155,13 +143,7 @@ pivot_wider.dtplyr_step <- function(data,
   if (names_sort && !no_id) {
     cols_sorted <- c(id_cols, sort(new_vars))
 
-    out <- step_call(
-      out,
-      "setcolorder",
-      args = list(cols_sorted),
-      vars = cols_sorted,
-      in_place = FALSE
-    )
+    out <- step_colorder(out, cols_sorted)
   }
 
   out <- step_repair(out, repair = names_repair)
@@ -206,13 +188,7 @@ step_repair <- function(data, repair = "check_unique", in_place = TRUE) {
   repaired_names <- vctrs::vec_as_names(data_names, repair = repair)
 
   if (any(data_names != repaired_names)) {
-    data <- step_call(
-      data,
-      "setnames",
-      args = list(new = repaired_names),
-      vars = repaired_names,
-      in_place = in_place
-    )
+    data <- step_setnames(data, seq_along(data_names), repaired_names, in_place = in_place)
   }
 
   data

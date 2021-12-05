@@ -56,6 +56,57 @@ test_that("translate context functions", {
   expect_equal(capture_dot(dt, cur_group_rows()), quote(.I))
 })
 
+
+test_that("translates if_else()/ifelse()", {
+  df <- data.frame(x = 1:5)
+
+  expect_equal(
+    capture_dot(df, ifelse(x < 0, 1, 2)),
+    expr(fifelse(x < 0, 1, 2))
+  )
+  expect_equal(
+    capture_dot(df, if_else(x < 0, 1, 2)),
+    expr(fifelse(x < 0, 1, 2))
+  )
+
+  # Handles unusual argument names/order
+  expect_equal(
+    capture_dot(df, ifelse(x < 0, n = 2, yes = 1)),
+    expr(fifelse(x < 0, 1, 2))
+  )
+  expect_equal(
+    capture_dot(df, if_else(x < 0, f = 2, true = 1)),
+    expr(fifelse(x < 0, 1, 2))
+  )
+
+  # tidyeval works inside if_else, #220
+  expect_equal(
+    capture_dot(df,  if_else(.data$x < 3, 1, 2)),
+    expr(fifelse(x < 3, 1, 2))
+  )
+})
+
+test_that("translates coalesce()", {
+  df <- data.frame(x = 1:5)
+  expect_equal(
+    capture_dot(df, coalesce(x, 1)),
+    expr(fcoalesce(x, 1))
+  )
+})
+
+test_that("can use local variable with coalesce() and replace_na()", {
+  dt <- lazy_dt(data.frame(x = c(1, NA)), "dt")
+  n <- 10
+  expect_equal(
+    capture_dot(dt, coalesce(x, n)),
+    expr(fcoalesce(x, 10))
+  )
+  expect_equal(
+    capture_dot(dt, replace_na(x, n)),
+    expr(fcoalesce(x, 10))
+  )
+})
+
 test_that("translates case_when()", {
   dt <- lazy_dt(data.frame(x = 1:10, y = 1:10))
 
@@ -64,10 +115,41 @@ test_that("translates case_when()", {
     quote(fcase(x1, y1, x2, y2, x3, TRUE, rep(TRUE, .N), y4))
   )
 
+  # can use T for default, #272
+  expect_equal(
+    capture_dot(dt, case_when(x1 ~ y1, x2 ~ y2, x3 ~ TRUE, T ~ y4)),
+    quote(fcase(x1, y1, x2, y2, x3, TRUE, rep(TRUE, .N), y4))
+  )
+
   # translates recursively
   expect_equal(
     capture_dot(dt, case_when(x == 1 ~ n())),
     quote(fcase(x == 1, .N))
+  )
+})
+
+test_that("translates lag()/lead()", {
+  df <- data.frame(x = 1:5, y = 1:5)
+  expect_equal(
+    capture_dot(df, lag(x)),
+    expr(shift(x, type = "lag"))
+  )
+  expect_equal(
+    capture_dot(df, lead(x, 2, default = 3)),
+    expr(shift(x, n = 2, fill = 3, type = "lead"))
+  )
+  # Errors with order_by
+  expect_snapshot_error(
+    capture_dot(df, lag(x, order_by = y)),
+  )
+})
+
+test_that("can use local variable with lag()/lead()", {
+  dt <- lazy_dt(data.frame(x = c(1, NA)), "dt")
+  n <- 10
+  expect_equal(
+    capture_dot(dt, lag(x, n)),
+    expr(shift(x, n = 10, type = "lag"))
   )
 })
 
@@ -183,16 +265,6 @@ test_that("scoped verbs produce nice output", {
     dt %>% summarise_all(~ n()) %>% show_query(),
     expr(DT[, .(x = .N)])
   )
-
-  # mask if_else & coalesce with data.table versions, #112
-  expect_equal(
-    dt %>% summarise_all(~if_else(. > 0, -1, 1)) %>% show_query(),
-    expr(DT[ , .(x = fifelse(x > 0, -1, 1))])
-  )
-  expect_equal(
-    dt %>% summarise_all(~coalesce(., 1)) %>% show_query(),
-    expr(DT[ , .(x = fcoalesce(x, 1))])
-  )
 })
 
 test_that("non-Gforce verbs work", {
@@ -201,6 +273,40 @@ test_that("non-Gforce verbs work", {
 
   expect_equal(dt %>% summarise_at(vars(x), add) %>% pull(), 3)
   expect_equal(dt %>% mutate_at(vars(x), add) %>% pull(), c(3, 3))
+})
+
+test_that("`desc(col)` is translated to `-col` inside arrange", {
+  dt <- lazy_dt(data.table(x = c("a", "b")), "DT")
+  step <- arrange(dt, desc(x))
+  out <- collect(step)
+
+  expect_equal(show_query(step), expr(DT[order(-x)]))
+  expect_equal(out$x, c("b", "a"))
+})
+
+test_that("desc() checks the number of arguments", {
+  expect_snapshot(error = TRUE, capture_dot(df, desc(a, b)))
+})
+
+test_that("n_distinct() is translated to uniqueN()", {
+  # Works with multiple inputs
+  expect_equal(
+    dt_squash(expr(n_distinct(c(1, 1, 2), c(1, 2, 1)))),
+    expr(uniqueN(data.table(c(1, 1, 2), c(1, 2, 1))))
+  )
+  # Works with single column selection (in summarise())
+  expect_equal(
+    dt_squash(expr(n_distinct(x))),
+    expr(uniqueN(x))
+  )
+  dt <- lazy_dt(data.table(x = c("a", "a", "b", NA)), "DT")
+  step <- summarise(dt, num = n_distinct(x, na.rm = TRUE))
+  out <- collect(step)
+  expect_equal(
+    show_query(step),
+    expr(DT[, .(num = uniqueN(x, na.rm = TRUE))])
+  )
+  expect_equal(out$num, 2)
 })
 
 # fun_name ----------------------------------------------------------------

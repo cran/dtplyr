@@ -75,3 +75,49 @@ test_that("if for unsupported resummarise", {
   dt <- lazy_dt(data.frame(x = 1:3, y = 1:3))
   expect_error(dt %>% summarise(x = mean(x), x2 = sd(x)), "mutate")
 })
+
+test_that("summarise(.groups=)", {
+  # the `dplyr::` prefix is needed for `check()`
+  # should produce a message when called directly by user
+  expect_message(eval_bare(
+    expr(lazy_dt(data.frame(x = 1, y = 2), "DT") %>% group_by(x, y) %>% dplyr::summarise() %>% show_query()),
+    env(global_env())
+  ))
+  skip_if(utils::packageVersion("rlang") < "0.5.0")
+  expect_snapshot(eval_bare(
+    expr(lazy_dt(data.frame(x = 1, y = 2), "DT") %>% group_by(x, y) %>% dplyr::summarise() %>% show_query()),
+    env(global_env())
+  ))
+
+  # should be silent when called in another package
+  expect_silent(eval_bare(
+    expr(lazy_dt(data.frame(x = 1, y = 2), "DT") %>% group_by(x, y) %>% dplyr::summarise() %>% show_query()),
+    asNamespace("testthat")
+  ))
+
+  df <- lazy_dt(data.table(x = 1, y = 2), "DT") %>% group_by(x, y)
+  expect_equal(df %>% summarise() %>% group_vars(), "x")
+  expect_equal(df %>% summarise(.groups = "drop_last") %>% group_vars(), "x")
+  expect_equal(df %>% summarise(.groups = "drop") %>% group_vars(), character())
+  expect_equal(df %>% summarise(.groups = "keep") %>% group_vars(), c("x", "y"))
+
+  expect_snapshot_error(df %>% summarise(.groups = "rowwise"))
+})
+
+test_that("can change group vars", {
+  dt <- lazy_dt(data.frame(a = 1), "DT") %>% group_by(a)
+
+  res <- dt %>% summarise(a = 2)
+  expect_equal(
+    show_query(res),
+    expr(DT[, .(a = 2), keyby = .(a)][, `:=`("a", NULL)])
+  )
+  expect_equal(
+    as_tibble(res), tibble(a = 2)
+  )
+
+  # but not with across
+  expect_error(
+    dt %>% summarise(across(a, ~ 2)), "Column `a` doesn't exist"
+  )
+})

@@ -36,3 +36,18 @@ test_that("vars set correctly", {
   dt <- lazy_dt(data.frame(x = 1:3, y = 1:3))
   expect_equal(dt %>% arrange(x) %>% .$vars, c("x", "y"))
 })
+
+test_that("desc works with internal quosure", {
+  dt <- lazy_dt(data.table(x = c(4,3,9,7), y = 1:4))
+
+  desc_df <- dt %>% arrange(desc(!!quo(x))) %>% collect()
+
+  expect_equal(desc_df$x, c(9,7,4,3))
+})
+
+test_that("only add step if necessary", {
+  dt <- lazy_dt(data.frame(x = 1:3, y = 1:3))
+
+  expect_equal(dt %>% arrange(), dt)
+  expect_equal(dt %>% arrange(!!!list()), dt)
+})

@@ -54,15 +54,19 @@ dt %>% distinct(c = a + b, .keep_all = TRUE) %>% show_query()
 ## -----------------------------------------------------------------------------
 dt2 <- lazy_dt(data.frame(a = 1))
 
-dt %>% right_join(dt2, by = "a") %>% show_query()
 dt %>% inner_join(dt2, by = "a") %>% show_query()
+dt %>% right_join(dt2, by = "a") %>% show_query()
+dt %>% left_join(dt2, by = "a") %>% show_query()
+dt %>% anti_join(dt2, by = "a") %>% show_query()
+
+## -----------------------------------------------------------------------------
 dt %>% full_join(dt2, by = "a") %>% show_query()
 
 ## -----------------------------------------------------------------------------
-dt %>% left_join(dt2, by = "a") %>% show_query()
+dt3 <- lazy_dt(data.frame(b = 1, a = 1))
 
-## -----------------------------------------------------------------------------
-dt %>% anti_join(dt2, by = "a") %>% show_query()
+dt %>% left_join(dt3, by = "a") %>% show_query()
+dt %>% full_join(dt3, by = "b") %>% show_query()
 
 ## -----------------------------------------------------------------------------
 dt %>% semi_join(dt2, by = "a") %>% show_query()
