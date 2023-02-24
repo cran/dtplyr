@@ -43,10 +43,14 @@ separate.dtplyr_step <- function(data, col, into,
                                  remove = TRUE,
                                  convert = FALSE,
                                  ...) {
-  stopifnot(is.character(into))
-  stopifnot(is.character(sep))
+  if (!vctrs::vec_is(into, character())) {
+    abort("`into` must be a character vector.")
+  }
+  if (!vctrs::vec_is(sep, character())) {
+    abort("`sep` must be a character vector.")
+  }
 
-  col <- enexpr(col)
+  col <- sym(tidyselect::vars_pull(data$vars, !!enquo(col)))
 
   into_length <- length(into)
 
@@ -66,7 +70,7 @@ separate.dtplyr_step <- function(data, col, into,
     data,
     vars = union(data$vars, into),
     j = call2(":=", into, t_str_split),
-    needs_copy = if (data$implicit_copy) FALSE else TRUE
+    needs_copy = data$needs_copy || !data$implicit_copy
   )
 
   if (remove && !as.character(col) %in% into) {
@@ -74,22 +78,4 @@ separate.dtplyr_step <- function(data, col, into,
   }
 
   out
-}
-
-# exported onLoad
-separate.data.table <- function(data, col, into,
-                              sep = "[^[:alnum:]]+",
-                              remove = TRUE,
-                              convert = FALSE,
-                              ...) {
-  data <- lazy_dt(data)
-  tidyr::separate(
-    data,
-    col = {{ col }},
-    into = into,
-    sep = sep,
-    remove = remove,
-    convert = convert,
-    ...
-  )
 }

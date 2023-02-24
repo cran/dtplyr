@@ -20,7 +20,7 @@
 # exported onLoad
 complete.dtplyr_step <- function(data, ..., fill = list()) {
   dots <- enquos(...)
-  dots <- dots[!vapply(dots, quo_is_null, logical(1))]
+  dots <- dots[!map_lgl(dots, quo_is_null)]
   if (length(dots) == 0) {
     return(data)
   }
@@ -29,10 +29,4 @@ complete.dtplyr_step <- function(data, ..., fill = list()) {
   full <- dplyr::full_join(full, data, by = full$vars)
   full <- tidyr::replace_na(full, replace = fill)
   full
-}
-
-# exported onLoad
-complete.data.table <- function(data, ..., fill = list()) {
-  data <- lazy_dt(data)
-  tidyr::complete(data, ..., fill = fill)
 }

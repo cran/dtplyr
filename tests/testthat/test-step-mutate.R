@@ -33,6 +33,18 @@ test_that("unless there's already an implicit copy", {
   expect_false(dt %>% head() %>% mutate(y = 1) %>% .$needs_copy)
 })
 
+test_that("properly copies with chained operations, #210", {
+  dt <- lazy_dt(data.table(x = 1))
+
+  query <- dt %>%
+    mutate(z1 = 1) %>%
+    summarize(z2 = 2) %>%
+    mutate(z3 = 4)
+
+  expect_true(query$implicit_copy)
+  expect_true(query$needs_copy)
+})
+
 # dplyr verbs -------------------------------------------------------------
 
 test_that("generates single calls as expect", {
@@ -70,6 +82,7 @@ test_that("mutate generates compound expression if needed", {
 test_that("allows multiple assignment to the same variable", {
   dt <- lazy_dt(data.table(x = 1, y = 2), "DT")
 
+  # when nested
   expect_equal(
     dt %>% mutate(x = x * 2, x = x * 2) %>% show_query(),
     expr(copy(DT)[, c("x") := {
@@ -77,6 +90,16 @@ test_that("allows multiple assignment to the same variable", {
       x <- x * 2
       .(x)
     }])
+  )
+
+  # when not nested
+  expect_equal(
+    dt %>% mutate(z = 2, z = 3) %>% show_query(),
+    expr(copy(DT)[, `:=`(c("z"), {
+      z <- 2
+      z <- 3
+      .(z)
+    })])
   )
 })
 
@@ -94,6 +117,27 @@ test_that("can use across", {
   )
 })
 
+test_that("across() can access previously created variables", {
+  dt <- lazy_dt(data.frame(x = 1), "DT")
+  step <- mutate(dt, y = 2, across(y, sqrt))
+  expect_equal(
+    collect(step),
+    tibble(x = 1, y = sqrt(2))
+  )
+  expect_equal(
+    step$vars,
+    c("x", "y")
+  )
+  expect_equal(
+    show_query(step),
+    expr(copy(DT)[, `:=`(c("y"), {
+      y <- 2
+      y <- sqrt(y)
+      .(y)
+    })])
+  )
+})
+
 test_that("vars set correctly", {
   dt <- lazy_dt(data.frame(x = 1:3, y = 1:3))
   expect_equal(dt %>% mutate(z = 1) %>% .$vars, c("x", "y", "z"))
@@ -104,6 +148,171 @@ test_that("emtpy mutate returns input", {
   dt <- lazy_dt(data.frame(x = 1))
   expect_equal(mutate(dt), dt)
   expect_equal(mutate(dt, !!!list()), dt)
+})
+
+test_that("unnamed arguments matching column names are ignored", {
+  dt <- lazy_dt(data.frame(x = 1), "DT")
+  expect_identical(mutate(dt, x), dt)
+  expect_snapshot(mutate(dt, y), error = TRUE)
+})
+
+test_that("new columns take precedence over global variables", {
+  dt <- lazy_dt(data.frame(x = 1), "DT")
+  y <- 'global var'
+  step <- mutate(dt, y = 2, z = y + 1)
+  expect_equal(
+    collect(step),
+    tibble(x = 1, y = 2, z = 3)
+  )
+  expect_equal(
+    show_query(step),
+    expr(copy(DT)[, `:=`(c("y", "z"), {
+      y <- 2
+      z <- y + 1
+      .(y, z)
+    })])
+  )
+})
+
+test_that("works with `.by`", {
+  dt <- lazy_dt(data.table(x = 1:3, y = c("a", "a", "b")))
+  step <- dt %>%
+    mutate(row_num = row_number(), .by = y)
+
+  expect_equal(as_tibble(step), tibble(x = 1:3, y = c("a", "a", "b"), row_num = c(1, 2, 1)))
+  expect_true(length(step$groups) == 0)
+})
+
+# var = NULL -------------------------------------------------------------
+
+test_that("var = NULL works when var is in original data", {
+  dt <- lazy_dt(data.frame(x = 1), "DT")
+  step <-  dt %>% mutate(x = 2, z = x*2, x = NULL)
+  expect_equal(
+    collect(step),
+    tibble(z = 4)
+  )
+  expect_equal(
+    step$vars,
+    "z"
+  )
+  expect_equal(
+    show_query(step),
+    expr(copy(DT)[, `:=`(c("x", "z"), {
+      x <- 2
+      z <- x * 2
+      .(x, z)
+    })][, `:=`("x", NULL)]
+    )
+  )
+})
+
+test_that("var = NULL when var is in final output", {
+  dt <- lazy_dt(data.frame(x = 1), "DT")
+  step <- mutate(dt, y = NULL, y = 3)
+  expect_equal(
+    collect(step),
+    tibble(x = 1, y = 3)
+  )
+  expect_equal(
+    step$vars,
+    c("x", "y")
+  )
+  expect_equal(
+    show_query(step),
+    expr(copy(DT)[, `:=`(c("y"), {
+      y <- NULL
+      y <- 3
+      .(y)
+    })])
+  )
+})
+
+test_that("temp var with nested arguments", {
+  dt <- lazy_dt(data.frame(x = 1), "DT")
+
+  step <- mutate(dt, y = 2, z = y*2, y = NULL)
+  expect_equal(
+    collect(step),
+    tibble(x = 1, z = 4)
+  )
+  expect_equal(
+    step$vars,
+    c("x", "z")
+  )
+  expect_equal(
+    show_query(step),
+    expr(copy(DT)[, `:=`(c("y", "z"), {
+      y <- 2
+      z <- y * 2
+      .(y, z)
+    })][, `:=`("y", NULL)])
+  )
+})
+
+test_that("temp var with no new vars added", {
+  dt <- lazy_dt(data.frame(x = 1), "DT")
+
+  # when no other vars are added
+  step <- mutate(dt, y = 2, y = NULL)
+  expect_equal(
+    collect(step),
+    tibble(x = 1)
+  )
+  expect_equal(
+    step$vars,
+    "x"
+  )
+  expect_equal(
+    show_query(step),
+    expr(copy(DT)[, `:=`(c("y"), {
+      y <- 2
+      .(y)
+    })][, `:=`("y", NULL)])
+  )
+
+})
+
+test_that("var = NULL works when data is grouped", {
+  dt <- lazy_dt(data.frame(x = 1, g = 1), "DT") %>% group_by(g)
+
+  # when var is not in original data
+  step <- mutate(dt, y = 2, z = y*2, y = NULL)
+  expect_equal(
+    collect(step),
+    tibble(x = 1, g = 1, z = 4) %>% group_by(g)
+  )
+  expect_equal(
+    step$vars,
+    c("x", "g", "z")
+  )
+  expect_equal(
+    show_query(step),
+    expr(copy(DT)[, `:=`(c("y", "z"), {
+      y <- 2
+      z <- y * 2
+      .(y, z)
+    }), by = .(g)][, `:=`("y", NULL)])
+  )
+
+  # when var is in original data
+  step <-  dt %>% mutate(x = 2, z = x*2, x = NULL)
+  expect_equal(
+    collect(step),
+    tibble(g = 1, z = 4) %>% group_by(g)
+  )
+  expect_equal(
+    step$vars,
+    c("g", "z")
+  )
+  expect_equal(
+    show_query(step),
+    expr(copy(DT)[, `:=`(c("x", "z"), {
+      x <- 2
+      z <- x * 2
+      .(x, z)
+    }), by = .(g)][, `:=`("x", NULL)])
+  )
 })
 
 # .before and .after -----------------------------------------------------------
@@ -128,4 +337,85 @@ test_that("can use .before and .after to control column position", {
     mutate(dt, x = 1, .after = y) %>% as_tibble(),
     c("x", "y")
   )
+})
+
+# .before and .after -----------------------------------------------------------
+
+test_that(".keep = 'unused' keeps variables explicitly mentioned", {
+  df <- data.table(x = 1, y = 2)
+  out <- df %>%
+    mutate(x1 = x + 1, y = y, .keep = "unused") %>%
+    as.data.table()
+  expect_named(out, c("y", "x1"))
+})
+
+test_that(".keep = 'used' not affected by across()", {
+  df <- data.table(x = 1, y = 2, z = 3, a = "a", b = "b", c = "c")
+
+  # This must evaluate every column in order to figure out if should
+  # be included in the set or not, but that shouldn't be counted for
+  # the purposes of "used" variables
+  out <- df %>%
+    mutate(across(c(x, y, z), identity), .keep = "unused") %>%
+    as.data.table()
+  expect_named(out, names(df))
+})
+
+test_that(".keep = 'used' keeps variables used in expressions", {
+  df <- data.table(a = 1, b = 2, c = 3, x = 1, y = 2)
+  out <- df %>%
+    mutate(xy = x + y, .keep = "used") %>%
+    as.data.table()
+  expect_named(out, c("x", "y", "xy"))
+})
+
+test_that(".keep = 'none' only keeps grouping variables", {
+  df <- data.table(x = 1, y = 2)
+  gf <- df %>% group_by(x)
+
+  out1 <- df %>%
+    mutate(z = 1, .keep = "none") %>%
+    as.data.table()
+
+  expect_named(out1, "z")
+
+  out2 <- gf %>%
+    mutate(z = 1, .keep = "none") %>%
+    as.data.table()
+
+  expect_named(out2, c("x", "z"))
+})
+
+test_that(".keep = 'none' retains original ordering", {
+  df <- data.table(x = 1, y = 2)
+  out1 <- df %>%
+    mutate(y = 1, x = 2, .keep = "none") %>%
+    as.data.table()
+
+  expect_named(out1, c("x", "y"))
+
+  # even when grouped
+  out2 <- df %>%
+    group_by(x) %>%
+    mutate(y = 1, x = 2, .keep = "none") %>%
+    as.data.table()
+
+  expect_named(out2, c("x", "y"))
+})
+
+test_that("works with empty dots", {
+  df <- data.table(x = 1, y = 2)
+  out <- df %>%
+    mutate(.keep = "used") %>%
+    as.data.table()
+
+  expect_equal(ncol(out), 0)
+})
+
+test_that("works with trivial dots", {
+  out <- lazy_dt(mtcars) %>%
+    mutate(mpg, .keep = 'used') %>%
+    as.data.table()
+
+  expect_named(out, "mpg")
 })

@@ -45,9 +45,66 @@ test_that("desc works with internal quosure", {
   expect_equal(desc_df$x, c(9,7,4,3))
 })
 
+test_that("desc works .data pronoun", {
+  dt <- lazy_dt(data.table(x = c(4,3,9,7), y = 1:4))
+
+  desc_df <- dt %>% arrange(desc(.data$x)) %>% collect()
+
+  expect_equal(desc_df$x, c(9,7,4,3))
+})
+
 test_that("only add step if necessary", {
   dt <- lazy_dt(data.frame(x = 1:3, y = 1:3))
 
   expect_equal(dt %>% arrange(), dt)
   expect_equal(dt %>% arrange(!!!list()), dt)
+})
+
+test_that("uses setorder when there is already a copy", {
+  dt <- lazy_dt(data.frame(x = 1:3, y = 1:3), "DT")
+
+  # Works with implicit copy
+  step_implicit <- dt %>%
+    filter(x < 4) %>%
+    arrange(x, y)
+
+  expect_equal(
+    show_query(step_implicit),
+    expr(setorder(DT[x < 4], x, y, na.last = TRUE))
+  )
+
+  # Works with explicit copy
+  step_explicit <- dt %>%
+    mutate(x = x * 2) %>%
+    arrange(x, -y)
+
+  expect_equal(
+    show_query(step_explicit),
+    expr(setorder(copy(DT)[, `:=`(x = x * 2)], x, -y, na.last = TRUE))
+  )
+})
+
+test_that("setorder places NAs last", {
+  dt <- lazy_dt(tibble(x = c("b", NA, "a")), "DT")
+  dt$needs_copy <- TRUE
+
+  # Works with implicit copy
+  res <- dt %>%
+    arrange(x) %>%
+    as.data.table()
+
+  expect_equal(res$x, c("a", "b", NA))
+})
+
+test_that("works with a transmute expression", {
+  dt <- lazy_dt(data.frame(x = 1:3, y = 1:3), "DT")
+
+  step <- dt %>%
+    arrange(x + 1)
+  expect_equal(show_query(step), expr(DT[order(x + 1)]))
+
+  # Works with complex expression
+  step <- dt %>%
+    arrange(-(x + y))
+  expect_equal(show_query(step), expr(DT[order(-(x + y))]))
 })

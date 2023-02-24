@@ -19,9 +19,10 @@
 #'   filter(mpg > mean(mpg))
 #' @importFrom dplyr filter
 # exported onLoad
-filter.dtplyr_step <- function(.data, ..., .preserve = FALSE) {
+filter.dtplyr_step <- function(.data, ..., .by = NULL, .preserve = FALSE) {
   check_filter(...)
-  dots <- capture_dots(.data, ..., .j = FALSE)
+  by <- compute_by({{ .by }}, .data, by_arg = ".by", data_arg = ".data")
+  dots <- capture_dots(.data, ..., .j = FALSE, .by = by)
 
   if (filter_by_lgl_col(dots)) {
     # Suppress data.table warning when filtering with a logical variable
@@ -30,7 +31,7 @@ filter.dtplyr_step <- function(.data, ..., .preserve = FALSE) {
     i <- Reduce(function(x, y) call2("&", x, y), dots)
   }
 
-  step_subset_i(.data, i)
+  step_subset_i(.data, i, by)
 }
 
 filter_by_lgl_col <- function(dots) {
@@ -45,12 +46,6 @@ filter_by_lgl_col <- function(dots) {
 
   # catch expressions of form `!x`
   is_call(dot, name = "!", n = 1) && is_symbol(dot[[2]])
-}
-
-# exported onLoad
-filter.data.table <- function(.data, ...) {
-  .data <- lazy_dt(.data)
-  filter(.data, ...)
 }
 
 check_filter <- function(...) {
@@ -69,7 +64,7 @@ check_filter <- function(...) {
         x = glue::glue("Input `..{i}` is named."),
         i = glue::glue("This usually means that you've used `=` instead of `==`."),
         i = glue::glue("Did you mean `{name} == {as_label(expr)}`?", name = names(dots)[i])
-      ))
+      ), call = caller_env())
     }
 
   }

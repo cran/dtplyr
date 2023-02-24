@@ -64,6 +64,33 @@ test_that("only copies when necessary", {
     separate(x, into = c("left", "right"), sep = "-")
   expect_equal(
     show_query(step),
-    expr(DT[y < 4][, `:=`(!!c("left", "right"), tstrsplit(x, split = "-"))][, .(y, left, right)])
+    expr(DT[y < 4][, `:=`(!!c("left", "right"), tstrsplit(x, split = "-"))][, `:=`("x", NULL)])
   )
+})
+
+test_that("can pass quosure to `col` arg, #359", {
+  dt <- lazy_dt(tibble(combined = c("a_b", "a_b")), "DT")
+  separate2 <- function(df, col, into) {
+    collect(separate(df, {{ col }}, into))
+  }
+  out <- separate2(dt, combined, into = c("a", "b"))
+  expect_named(out, c("a", "b"))
+  expect_equal(out$a, c("a", "a"))
+  expect_equal(out$b, c("b", "b"))
+})
+
+test_that("can use numeric `col` arg", {
+  dt <- lazy_dt(tibble(combined = c("a_b", "a_b")), "DT")
+
+  out <- collect(separate(dt, 1, into = c("a", "b")))
+  expect_named(out, c("a", "b"))
+  expect_equal(out$a, c("a", "a"))
+  expect_equal(out$b, c("b", "b"))
+})
+
+test_that("errors on multiple columns in `col`", {
+  dt <- lazy_dt(tibble(x = c("a_b", "a_b"), y = x), "DT")
+
+  expect_error(separate(dt, c(x, y), into = c("left", "right")),
+               "must select exactly one column")
 })

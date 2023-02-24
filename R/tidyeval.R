@@ -16,8 +16,9 @@ dt_eval <- function(x) {
 dt_funs <- c(
   "between", "CJ", "copy", "data.table", "dcast", "melt", "nafill",
   "fcase", "fcoalesce", "fifelse", "fintersect", "frank", "frankv", "fsetdiff", "funion",
-  "setcolorder", "setnames", "shift", "tstrsplit", "uniqueN"
+  "setcolorder", "setnames", "setorder", "shift", "tstrsplit", "uniqueN"
 )
+dt_symbols <- c(".SD", ".BY", ".N", ".I", ".GRP", ".NGRP")
 add_dt_wrappers <- function(env) {
   env_bind(env, !!!env_get_list(ns_env("data.table"), dt_funs))
 }
@@ -27,12 +28,42 @@ globalVariables(dt_funs)
 # data.table. The goal is to get the majority of real-world code to work,
 # without aiming for 100% compliance.
 
-capture_dots <- function(.data, ..., .j = TRUE) {
+capture_dots <- function(.data, ..., .j = TRUE, .by = new_by()) {
+  if (.by$uses_by) {
+    .data$groups <- .by$names
+  }
+
   dots <- enquos(..., .named = .j)
-  dots <- lapply(dots, dt_squash, data = .data, j = .j)
+  dots <- map(dots, dt_squash, data = .data, j = .j, is_top = TRUE)
 
   # Remove names from any list elements
-  is_list <- vapply(dots, is.list, logical(1))
+  is_list <- map_lgl(dots, is.list)
+  names(dots)[is_list] <- ""
+
+  # Auto-splice list results from dt_squash()
+  dots[!is_list] <- lapply(dots[!is_list], list)
+  unlist(dots, recursive = FALSE)
+}
+
+capture_new_vars <- function(.data, ..., .by = new_by()) {
+  if (.by$uses_by) {
+    .data$groups <- .by$names
+  }
+
+  dots <- as.list(enquos(..., .named = TRUE))
+  for (i in seq_along(dots)) {
+    dot <- dots[[i]]
+    dot <- dt_squash(dot, data = .data, is_top = TRUE)
+    if (is.null(dot)) {
+      dots[i] <- list(NULL)
+    } else {
+      dots[[i]] <- dot
+    }
+    .data$vars <- union(.data$vars, names(dot) %||% names(dots)[i])
+  }
+
+  # Remove names from any list elements
+  is_list <- map_lgl(dots, is.list)
   names(dots)[is_list] <- ""
 
   # Auto-splice list results from dt_squash()
@@ -45,7 +76,7 @@ capture_dot <- function(.data, x, j = TRUE) {
 }
 
 # squash quosures
-dt_squash <- function(x, env, data, j = TRUE) {
+dt_squash <- function(x, env, data, j = TRUE, is_top = FALSE) {
   if (is_atomic(x) || is_null(x)) {
     x
   } else if (is_symbol(x)) {
@@ -56,7 +87,7 @@ dt_squash <- function(x, env, data, j = TRUE) {
 
       if (var %in% c("T", "F")) {
         as.logical(var)
-      } else if (nchar(x) > 0 && substr(var, 1, 1) == ".") {
+      } else if (var %in% dt_symbols) {
         # data table pronouns are bound to NULL
         x
       } else if (!var %in% data$vars && env_has(env, var, inherit = TRUE)) {
@@ -79,13 +110,17 @@ dt_squash <- function(x, env, data, j = TRUE) {
       }
     }
   } else if (is_quosure(x)) {
-    dt_squash(get_expr(x), get_env(x), data, j = j)
+    dt_squash(get_expr(x), get_env(x), data, j = j, is_top)
   } else if (is_call(x, "if_any")) {
     dt_squash_if(x, env, data, j = j, reduce = "|")
   } else if (is_call(x, "if_all")) {
     dt_squash_if(x, env, data, j = j, reduce = "&")
   } else if (is_call(x, "across")) {
-    dt_squash_across(x, env, data, j = j)
+    dt_squash_across(x, env, data, j = j, is_top)
+  } else if (is_call(x, "pick")) {
+    x[[1]] <- sym("c")
+    call <- call2("across", x)
+    dt_squash_across(call, env, data, j, is_top)
   } else if (is_call(x)) {
     dt_squash_call(x, env, data, j = j)
   } else {
@@ -105,7 +140,7 @@ dt_squash_call <- function(x, env, data, j = TRUE) {
       sym(paste0("..", var))
     }
   } else if (is_call(x, c("coalesce", "replace_na"))) {
-    args <- lapply(x[-1], dt_squash, env = env, data = data, j = j)
+    args <- lapply(x[-1], dt_squash, env, data, j)
     call2("fcoalesce", !!!args)
   } else if (is_call(x, "case_when")) {
     # case_when(x ~ y) -> fcase(x, y)
@@ -130,11 +165,9 @@ dt_squash_call <- function(x, env, data, j = TRUE) {
   } else if (is_call(x, "cur_group_rows")) {
     quote(.I)
   } else if (is_call(x, "desc")) {
-      if (!has_length(x, 2L)) {
-        abort("`desc()` expects exactly one argument.")
-      }
+    check_one_arg(x)
     x[[1]] <- sym("-")
-    x[[2]] <- get_expr(x[[2]])
+    x[[2]] <- dt_squash(x[[2]], env, data, j)
     x
   } else if (is_call(x, c("if_else", "ifelse"))) {
     if (is_call(x, "if_else")) {
@@ -190,8 +223,32 @@ dt_squash_call <- function(x, env, data, j = TRUE) {
   } else if (is_call(x, "row_number", n = 1)) {
     arg <- dt_squash(x[[2]], env, data, j = j)
     expr(frank(!!arg, ties.method = "first", na.last = "keep"))
+  } else if (is_call(x, "min_rank")) {
+    check_one_arg(x)
+    arg <- dt_squash(x[[2]], env, data, j = j)
+    expr(frank(!!arg, ties.method = "min", na.last = "keep"))
+  } else if (is_call(x, "dense_rank")) {
+    check_one_arg(x)
+    arg <- dt_squash(x[[2]], env, data, j = j)
+    expr(frank(!!arg, ties.method = "dense", na.last = "keep"))
+  } else if (is_call(x, "percent_rank")) {
+    check_one_arg(x)
+    arg <- dt_squash(x[[2]], env, data, j = j)
+    frank_expr <- expr((frank(!!arg, ties.method = "min", na.last = "keep") - 1))
+    expr(!!frank_expr / (sum(!is.na(!!arg)) - 1))
+  } else if (is_call(x, "cume_dist")) {
+    check_one_arg(x)
+    arg <- dt_squash(x[[2]], env, data, j = j)
+    frank_expr <- expr(frank(!!arg, ties.method = "max", na.last = "keep"))
+    expr(!!frank_expr / sum(!is.na(!!arg)))
   } else if (is.function(x[[1]]) || is_call(x, "function")) {
     simplify_function_call(x, env, data, j = j)
+  } else if (is_call(x, c("glue", "str_glue")) && j) {
+    call <- call_match(x, glue::glue)
+    if (is.null(call$.envir)) {
+      call$.envir <- quote(.SD)
+    }
+    call
   } else {
     x[-1] <- lapply(x[-1], dt_squash, env, data, j = j)
     x
@@ -222,7 +279,10 @@ simplify_function_call <- function(x, env, data, j = TRUE) {
     dt_squash(out, env, data, j = j)
   } else {
     name <- fun_name(x[[1]])
-    if (is.null(name)) {
+    if (is_call(x, "function")) {
+      x[[3]] <- dt_squash(x[[3]], env, data, j)
+      return(x)
+    } else if (is.null(name)) {
       return(x)
     }
 
@@ -269,4 +329,11 @@ fun_name <- function(fun) {
   }
 
   NULL
+}
+
+check_one_arg <- function(x) {
+  fun <- as_name(x[[1]])
+  if (!has_length(x, 2L)) {
+    abort(glue("`{fun}()` expects exactly one argument."))
+  }
 }

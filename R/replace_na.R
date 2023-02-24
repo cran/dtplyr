@@ -41,17 +41,11 @@ replace_na.dtplyr_step <- function(data, replace = list()) {
   mutate(data, !!!replace_calls)
 }
 
-# exported onLoad
-replace_na.data.table <- function(data, replace = list()) {
-  data <- lazy_dt(data)
-  tidyr::replace_na(data, replace = replace)
-}
-
 check_replacement <- function(x, var) {
   n <- length(x)
   if (n == 1) {
     return()
   }
 
-  abort(glue::glue("Replacement for `{var}` is length {n}, not length 1"))
+  abort(glue::glue("Replacement for `{var}` is length {n}, not length 1"), call = caller_env())
 }

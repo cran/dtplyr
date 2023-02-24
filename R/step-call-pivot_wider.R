@@ -56,17 +56,14 @@ pivot_wider.dtplyr_step <- function(data,
                                     values_fill = NULL,
                                     values_fn = NULL,
                                     ...) {
-
-  sim_data <- simulate_vars(data)
-  names_from <- names(tidyselect::eval_select(enquo(names_from), sim_data))
-  values_from <- names(tidyselect::eval_select(enquo(values_from), sim_data))
+  names_from <- names(tidyselect::eval_select(enquo(names_from), data))
+  values_from <- names(tidyselect::eval_select(enquo(values_from), data))
 
   id_cols <- enquo(id_cols)
   if (quo_is_null(id_cols)) {
-    sim_vars <- names(sim_data)
-    id_cols <- sim_vars[!sim_vars %in% c(names_from, values_from)]
+    id_cols <- setdiff(data$vars, c(names_from, values_from))
   } else {
-    id_cols <- names(tidyselect::eval_select(id_cols, sim_data))
+    id_cols <- names(tidyselect::eval_select(id_cols, data))
   }
 
   if (length(names_from) > 1) {
@@ -76,6 +73,8 @@ pivot_wider.dtplyr_step <- function(data,
     new_vars <- unique(pull(data, !!sym(names_from)))
     new_vars <- as.character(new_vars)
   }
+
+  new_vars <- vctrs::vec_assign(new_vars, is.na(new_vars), "NA")
 
   if (!is.null(names_glue)) {
     glue_df <- as.data.table(distinct(ungroup(data), !!!syms(names_from)))
@@ -110,7 +109,7 @@ pivot_wider.dtplyr_step <- function(data,
   )
 
   # Clean up call args if defaults are used
-  args <- args[!vapply(args, is.null, lgl(1))]
+  args <- args[!map_lgl(args, is.null)]
 
   if (names_sep == "_") {
     args$sep <- NULL
@@ -152,35 +151,6 @@ pivot_wider.dtplyr_step <- function(data,
 }
 
 globalVariables(c(".", ".names_from", "name", "value", "pivot_wider"))
-
-# exported onLoad
-pivot_wider.data.table <- function(data,
-                                   id_cols = NULL,
-                                   names_from = name,
-                                   names_prefix = "",
-                                   names_sep = "_",
-                                   names_glue = NULL,
-                                   names_sort = FALSE,
-                                   names_repair = "check_unique",
-                                   values_from = value,
-                                   values_fill = NULL,
-                                   values_fn = NULL,
-                                   ...) {
-  data <- lazy_dt(data)
-
-  pivot_wider(
-    data,
-    id_cols = {{ id_cols }},
-    names_from = {{ names_from }},
-    names_prefix = names_prefix,
-    names_sep = names_sep,
-    names_glue = names_glue,
-    names_sort = names_sort,
-    names_repair = names_repair,
-    values_from = {{ values_from }},
-    values_fn = values_fn
-  )
-}
 
 step_repair <- function(data, repair = "check_unique", in_place = TRUE) {
   sim_data <- simulate_vars(data)

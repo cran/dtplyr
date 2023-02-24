@@ -140,7 +140,7 @@ test_that("can use names_sep w/out .value in names_to", {
 })
 
 test_that("informative errors on unsupported features", {
-  dt <- data.table(a1_1 = 1, b2_2 = 2)
+  dt <- lazy_dt(data.table(a1_1 = 1, b2_2 = 2))
 
   expect_snapshot(error = TRUE, {
     dt %>% pivot_longer(names_ptypes = list())
@@ -149,5 +149,21 @@ test_that("informative errors on unsupported features", {
     dt %>% pivot_longer(values_transform = list())
   })
 
+})
+
+test_that("can pivot all cols to long", {
+  tbl <- tibble(x = 1:2, y = 3:4)
+  dt <- lazy_dt(tbl, "DT")
+  step <- pivot_longer(dt, x:y)
+  out <- collect(step)
+
+  expect_equal(
+    show_query(step),
+    expr(melt(DT, measure.vars = !!c("x", "y"), variable.name = "name",
+              variable.factor = FALSE))
+  )
+  expect_equal(step$vars, c("name", "value"))
+  expect_equal(out$name, c("x", "x", "y", "y"))
+  expect_equal(out$value, c(1, 2, 3, 4))
 })
 

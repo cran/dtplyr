@@ -17,8 +17,7 @@
 #' dt %>% select(ends_with("2"))
 #' dt %>% select(z1 = x1, z2 = x2)
 select.dtplyr_step <- function(.data, ...) {
-  sim_data <- simulate_vars(.data)
-  locs <- tidyselect::eval_select(expr(c(...)), sim_data)
+  locs <- tidyselect::eval_select(expr(c(...)), .data)
   locs <- ensure_group_vars(locs, .data$vars, .data$groups)
 
   vars <- set_names(.data$vars[locs], names(locs))
@@ -26,6 +25,7 @@ select.dtplyr_step <- function(.data, ...) {
   if (length(vars) == 0) {
     j <- 0L
     groups <- .data$groups
+    is_unnamed <- TRUE
   } else {
     groups <- rename_groups(.data$groups, vars)
     vars <- simplify_names(vars)
@@ -37,14 +37,31 @@ select.dtplyr_step <- function(.data, ...) {
     j <- call2(".", !!!syms(vars))
   }
 
-  out <- step_subset_j(.data, vars = names(locs), groups = character(), j = j)
+  if (is_copied(.data) && is_unnamed && !can_merge_subset(.data)) {
+    # Drop columns by reference if:
+    #  * Data has been copied (implicitly or explicitly)
+    #  * There is no renaming in the select statement
+    #  * The selection can't be combined with a prior `i` step. Ex: dt[x < 7, .(x, y)]
+    vars_drop <- setdiff(.data$vars, vars)
+    out <- remove_vars(.data, vars_drop)
+    out <- step_colorder(out, vars)
+  } else {
+    out <- step_subset_j(.data, vars = names(locs), groups = character(), j = j)
+  }
+
   step_group(out, groups)
 }
 
-#' @export
-select.data.table <- function(.data, ...) {
-  .data <- lazy_dt(.data)
-  select(.data, ...)
+#' @importFrom tidyselect tidyselect_data_proxy
+#' @exportS3Method
+tidyselect_data_proxy.dtplyr_step <- function(x) {
+  simulate_vars(x)
+}
+
+#' @importFrom tidyselect tidyselect_data_has_predicates
+#' @exportS3Method
+tidyselect_data_has_predicates.dtplyr_step <- function(x) {
+  FALSE
 }
 
 simulate_vars <- function(x, drop_groups = FALSE) {
@@ -73,7 +90,6 @@ ensure_group_vars <- function(loc, names, groups) {
   loc
 }
 
-
 rename_groups <- function(groups, vars) {
   old2new <- set_names(names(vars), vars)
   groups[groups %in% names(old2new)] <- old2new[groups]
@@ -83,4 +99,15 @@ rename_groups <- function(groups, vars) {
 simplify_names <- function(vars) {
   names(vars)[vars == names(vars)] <- ""
   vars
+}
+
+remove_vars <- function(.data, vars) {
+  if (is_empty(vars)) {
+    return(.data)
+  }
+  out <- step_subset(
+    .data, groups = character(), j = expr(!!unique(vars) := NULL),
+    vars = setdiff(.data$vars, vars)
+  )
+  group_by(out, !!!syms(.data$groups))
 }

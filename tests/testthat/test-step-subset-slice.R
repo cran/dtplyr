@@ -1,4 +1,3 @@
-
 test_that("can slice", {
   dt <- lazy_dt(data.table(x = 1, y = 2), "DT")
 
@@ -8,11 +7,17 @@ test_that("can slice", {
   )
   expect_equal(
     dt %>% slice(c(1, 2)) %>% show_query(),
-    expr(DT[c(1, 2)[between(c(1, 2), -.N, .N)]])
+    expr(DT[{
+      .rows <- c(1, 2)
+      .rows[between(.rows, -.N, .N)]
+    }])
   )
   expect_equal(
     dt %>% slice(1, 2, 3) %>% show_query(),
-    expr(DT[c(1, 2, 3)[between(c(1, 2, 3), -.N, .N)]])
+    expr(DT[{
+      .rows <- c(1, 2, 3)
+      .rows[between(.rows, -.N, .N)]
+    }])
   )
 })
 
@@ -22,9 +27,26 @@ test_that("can slice when grouped", {
 
   expect_equal(
     dt2 %>% show_query(),
-    expr(DT[DT[, .I[1[between(1, -.N, .N)]], by = .(x)]$V1])
+    expr(DT[DT[, .I[{
+      .rows <- 1
+      .rows[between(.rows, -.N, .N)]
+    }], by = .(x)]$V1])
   )
   expect_equal(as_tibble(dt2), tibble(x = c(1, 2), y = c(1, 3)))
+})
+
+test_that("can use `.by`", {
+  dt1 <- lazy_dt(data.table(x = c(1, 1, 2, 2), y = c(1, 2, 3, 4)), "DT")
+  dt2 <- dt1 %>% slice(1, .by = x)
+
+  expect_equal(
+    dt2 %>% show_query(),
+    expr(DT[DT[, .I[{
+      .rows <- 1
+      .rows[between(.rows, -.N, .N)]
+    }], by = .(x)]$V1])
+  )
+  expect_equal(collect(dt2), tibble(x = c(1, 2), y = c(1, 3)))
 })
 
 test_that("slicing doesn't sorts groups", {
@@ -119,14 +141,19 @@ test_that("arguments to sample are passed along", {
 
 test_that("slice_*() checks for empty ...", {
   dt <- lazy_dt(data.frame(x = 1:10))
-  expect_error(slice_head(dt, 5), class = "rlib_error_dots_nonempty")
-  expect_error(slice_tail(dt, 5), class = "rlib_error_dots_nonempty")
-  expect_error(slice_min(dt, x, 5), class = "rlib_error_dots_nonempty")
-  expect_error(slice_max(dt, x, 5), class = "rlib_error_dots_nonempty")
-  expect_error(slice_sample(dt, 5), class = "rlib_error_dots_nonempty")
 
-  expect_error(slice_min(dt), "missing")
-  expect_error(slice_max(dt), "missing")
+  expect_snapshot(error = TRUE, {
+    slice_head(dt, 5)
+    slice_tail(dt, 5)
+    slice_min(dt, x, 5)
+    slice_max(dt, x, 5)
+    slice_sample(dt, 5)
+  })
+
+  expect_snapshot(error = TRUE, {
+    slice_min(dt)
+    slice_max(dt)
+  })
 })
 
 test_that("slice_*() checks for constant n= and prop=", {
@@ -144,12 +171,14 @@ test_that("slice_*() checks for constant n= and prop=", {
 })
 
 test_that("check_slice_catches common errors", {
+  dt <- lazy_dt(data.frame(x = 1:10))
+
   expect_snapshot(error = TRUE, {
-    check_slice_size(n = 1, prop = 1)
-    check_slice_size(n = "a")
-    check_slice_size(prop = "a")
-    check_slice_size(n = NA)
-    check_slice_size(prop = NA)
+    slice_head(dt, n = 1, prop = 1)
+    slice_head(dt, n = "a")
+    slice_head(dt, prop = "a")
+    slice_head(dt, n = NA)
+    slice_head(dt, prop = NA)
   })
 })
 
@@ -196,6 +225,26 @@ test_that("Non-integer number of rows computed correctly", {
   expect_equal(eval_tidy(get_slice_size(prop = 0.16), list(.N = 10)), 1)
   expect_equal(eval_tidy(get_slice_size(n = -1.6), list(.N = 10)), 9)
   expect_equal(eval_tidy(get_slice_size(prop = -0.16), list(.N = 10)), 9)
+})
+
+test_that("variants work with `by`", {
+  df <- lazy_dt(data.table(x = 1:3, y = c("a", "a", "b")), "DT")
+  expect_equal(
+    df %>% slice_head(n = 1, by = y) %>% collect(),
+    tibble(x = c(1, 3), y = c("a", "b"))
+  )
+  expect_equal(
+    df %>% slice_tail(n = 1, by = y) %>% as_tibble(),
+    tibble(x = c(2, 3), y = c("a", "b"))
+  )
+  expect_equal(
+    df %>% slice_min(n = 1, x, by = y) %>% as_tibble(),
+    tibble(x = c(1, 3), y = c("a", "b"))
+  )
+  expect_equal(
+    df %>% slice_max(n = 1, x, by = y) %>% as_tibble(),
+    tibble(x = c(3, 2), y = c("b", "a"))
+  )
 })
 
 

@@ -20,6 +20,9 @@ test_that("existing non-variables get inlined", {
   n <- 10
   expect_equal(capture_dot(dt, x + n), quote(x + 10))
   expect_equal(capture_dot(dt, x + m), quote(x + m))
+  # even if they start with "." (#386)
+  .n <- 20
+  expect_equal(capture_dot(dt, x + .n), quote(x + 20))
 })
 
 test_that("unless we're operating in the global environment", {
@@ -70,14 +73,17 @@ test_that("translates if_else()/ifelse()", {
   )
 
   # Handles unusual argument names/order
-  expect_equal(
-    capture_dot(df, ifelse(x < 0, n = 2, yes = 1)),
-    expr(fifelse(x < 0, 1, 2))
-  )
-  expect_equal(
-    capture_dot(df, if_else(x < 0, f = 2, true = 1)),
-    expr(fifelse(x < 0, 1, 2))
-  )
+  suppressWarnings({
+    expect_equal(
+      capture_dot(df, ifelse(x < 0, n = 2, yes = 1)),
+      expr(fifelse(x < 0, 1, 2))
+    )
+    expect_equal(
+      capture_dot(df, if_else(x < 0, f = 2, true = 1)),
+      expr(fifelse(x < 0, 1, 2))
+    )
+  })
+
 
   # tidyeval works inside if_else, #220
   expect_equal(
@@ -176,6 +182,31 @@ test_that("can splice a data frame", {
   expect_equal(dots, as.list(df))
 })
 
+test_that("can use glue, (#344)", {
+  df <- data.table(a = letters[1:3], b = letters[1:3])
+  expect_equal(
+    capture_dot(df, glue::glue("{a}_{b}")),
+    quote(glue::glue("{a}_{b}", .envir = .SD))
+  )
+  expect_equal(
+    capture_dot(df, glue::glue("{a}_{b}"), j = FALSE),
+    quote(glue::glue("{a}_{b}"))
+  )
+
+  out <- df %>%
+    transmute(a_b = glue::glue("{a}_{b}")) %>%
+    collect()
+  expect_equal(out$a_b, c("a_a", "b_b", "c_c"))
+})
+
+test_that("properly handles anonymous functions, #362", {
+  df <- data.table(a = list(1, 1, 1))
+  expect_equal(
+    capture_dot(df, sapply(a, function(x) x + n())),
+    quote(sapply(a, function(x) x + .N))
+  )
+})
+
 # evaluation --------------------------------------------------------------
 
 test_that("can access functions in local env", {
@@ -209,6 +240,16 @@ test_that("locals are executed before call", {
   )
 })
 
+test_that("errors when `where()` is used, #271/#368", {
+  dt <- lazy_dt(data.frame(x = 1, y = 2))
+  expect_snapshot_error(
+    select(dt, where(is.numeric))
+  )
+  expect_snapshot_error(
+    mutate(dt, across(!where(is.character), ~ .x + 1))
+  )
+})
+
 # dplyr verbs -------------------------------------------------------------
 
 test_that("n() is equivalent to .N", {
@@ -224,7 +265,7 @@ test_that("n() is equivalent to .N", {
   )
 })
 
-test_that("row_number() is equivalent .I", {
+test_that("row_number() is equivalent seq_len(.N)", {
   dt <- lazy_dt(data.frame(g = c(1, 1, 2), x = 1:3))
 
   expect_equal(
@@ -243,6 +284,21 @@ test_that("row_number(x) is equivalent to rank", {
     dt %>% mutate(n = row_number(x)) %>% pull(),
     c(1L, 3L, 2L)
   )
+})
+
+test_that("ranking functions are translated", {
+  df <- lazy_dt(tibble(x = c(1, 2, NA, 1, 0, NaN)))
+
+  res <- df %>%
+    mutate(percent_rank = percent_rank(x),
+           min_rank = min_rank(x),
+           dense_rank = dense_rank(x),
+           cume_dist = cume_dist(x))
+
+  expect_equal(pull(res, percent_rank), c(1 / 3, 1, NA, 1 / 3, 0, NA))
+  expect_equal(pull(res, min_rank), c(2L, 4L, NA, 2L, 1L, NA))
+  expect_equal(pull(res, dense_rank), c(2L, 3L, NA, 2L, 1L, NA))
+  expect_equal(pull(res, cume_dist), c(.75, 1, NA, .75, .25, NA))
 })
 
 test_that("scoped verbs produce nice output", {

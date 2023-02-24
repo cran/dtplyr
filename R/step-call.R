@@ -71,17 +71,9 @@ tail.dtplyr_step <- function(x, n = 6L, ...) {
 #' dt %>% rename(new_x = x, new_y = y)
 #' dt %>% rename_with(toupper)
 rename.dtplyr_step <- function(.data, ...) {
-  sim_data <- simulate_vars(.data)
-  locs <- tidyselect::eval_rename(expr(c(...)), sim_data)
+  locs <- tidyselect::eval_rename(expr(c(...)), .data)
 
   step_setnames(.data, .data$vars[locs], names(locs), in_place = TRUE, rename_groups = TRUE)
-}
-
-
-#' @export
-rename.data.table <- function(.data, ...) {
-  .data <- lazy_dt(.data)
-  rename(.data, ...)
 }
 
 #' @importFrom dplyr rename_with
@@ -116,15 +108,14 @@ rename_with.dtplyr_step <- function(.data, .fn, .cols = everything(), ...) {
   # But this should be fast, so doing it twice shouldn't matter
   .fn <- as_function(.fn)
 
-  sim_data <- simulate_vars(.data)
-  locs <- unname(tidyselect::eval_select(enquo(.cols), sim_data))
+  locs <- unname(tidyselect::eval_select(enquo(.cols), .data))
   old_vars <- .data$vars[locs]
   new_vars <- .fn(old_vars)
 
   vars <- .data$vars
   vars[locs] <- new_vars
 
-  if (identical(locs, seq_along(sim_data))) {
+  if (identical(locs, seq_along(.data$vars))) {
     out <- step_call(.data,
       "setnames",
       args = list(fn),
@@ -142,12 +133,6 @@ rename_with.dtplyr_step <- function(.data, .fn, .cols = everything(), ...) {
 
   groups <- rename_groups(.data$groups, set_names(new_vars, old_vars))
   step_group(out, groups)
-}
-
-#' @export
-rename_with.data.table <- function(.data, .fn, .cols = everything(), ...) {
-  .data <- lazy_dt(.data)
-  rename_with(.data, .fn = .fn, .cols = {{.cols}}, ...)
 }
 
 #' Subset distinct/unique rows
@@ -173,7 +158,7 @@ distinct.dtplyr_step <- function(.data, ..., .keep_all = FALSE) {
   dots <- capture_dots(.data, ...)
 
   if (length(dots) > 0) {
-    only_syms <- all(vapply(dots, is_symbol, logical(1)))
+    only_syms <- all(map_lgl(dots, is_symbol))
 
     if (.keep_all) {
       if (only_syms) {
@@ -198,12 +183,6 @@ distinct.dtplyr_step <- function(.data, ..., .keep_all = FALSE) {
   args$by <- by
 
   step_call(.data, "unique", args = args)
-}
-
-#' @export
-distinct.data.table <- function(.data, ...) {
-  .data <- lazy_dt(.data)
-  distinct(.data, ...)
 }
 
 #' @export
@@ -235,8 +214,7 @@ unique.dtplyr_step <- function(x, incomparables = FALSE, ...) {
 #' dt %>% drop_na(x, any_of(vars))
 # exported onLoad
 drop_na.dtplyr_step <- function(data, ...) {
-  sim_data <- simulate_vars(data)
-  locs <- names(tidyselect::eval_select(expr(c(...)), sim_data))
+  locs <- names(tidyselect::eval_select(expr(c(...)), data))
 
   args <- list()
   if (length(locs) > 0) {
@@ -244,10 +222,4 @@ drop_na.dtplyr_step <- function(data, ...) {
   }
 
   step_call(data, "na.omit", args = args)
-}
-
-# exported onLoad
-drop_na.data.table <- function(data, ...) {
-  data <- lazy_dt(data)
-  tidyr::drop_na(data, ...)
 }

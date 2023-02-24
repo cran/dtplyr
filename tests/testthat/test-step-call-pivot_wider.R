@@ -7,7 +7,7 @@ test_that("can pivot all cols to wide", {
   expect_equal(nrow(pv), 1)
   expect_equal(
     show_query(step),
-    expr(dcast(DT, formula = "..." ~ key, value.var = "val")[, .(x, y, z)])
+    expr(dcast(DT, formula = "..." ~ key, value.var = "val")[, `:=`(".", NULL)])
   )
 })
 
@@ -63,9 +63,36 @@ test_that("column with `...j` name can be used as `names_from`", {
   expect_equal(nrow(pv), 1)
 })
 
+test_that("correctly handles columns named NA, #394", {
+  df <- lazy_dt(tibble(x = c("a", "a"), y = c("a", NA), z = 1:2))
+
+  res <- df %>%
+    pivot_wider(names_from = y,
+                values_from = z,
+                names_glue = "{y}_new",
+                names_repair = "minimal") %>%
+    collect()
+  expect_named(res, c("x", "NA_new", "a_new"))
+
+  res <- df %>%
+    pivot_wider(names_from = y,
+                values_from = z,
+                names_glue = "{y}",
+                names_repair = "minimal") %>%
+    collect()
+  expect_named(res, c("x", "NA", "a"))
+
+  df <- lazy_dt(tibble(x = c('a', NA), y = 1:2))
+
+  res <- df %>%
+    pivot_wider(names_from = 'x', values_from = 'y') %>%
+    collect()
+  expect_named(res, c("NA", "a"))
+})
+
 # column names -------------------------------------------------------------
 
-test_that("names_glue affects output names & auto-converts data.table to lazy_dt", {
+test_that("names_glue affects output names", {
   df <- lazy_dt(
     data.frame(
       x = c("X", "Y"),

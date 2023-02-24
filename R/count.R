@@ -17,22 +17,39 @@
 count.dtplyr_step <- function(.data, ..., wt = NULL, sort = FALSE, name = NULL) {
   if (!missing(...)) {
     out <- group_by(.data, ..., .add = TRUE)
+    .groups <- "drop"
+  } else {
+    out <- .data
+    .groups <- "keep"
+  }
+
+  out <- tally_count(out, {{ wt }}, sort, name, .groups)
+
+  out
+}
+
+#' @importFrom dplyr add_count
+#' @export
+add_count.dtplyr_step <- function(.data, ..., wt = NULL, sort = FALSE, name = NULL) {
+  if (!missing(...)) {
+    out <- group_by(.data, ..., .add = TRUE)
   } else {
     out <- .data
   }
-
-  tally(out, wt = !!enquo(wt), sort = sort, name = name)
-}
-
-#' @export
-count.data.table <- function(.data, ...) {
-  .data <- lazy_dt(.data)
-  count(.data, ...)
+  out <- dplyr::add_tally(out, wt = !!enquo(wt), sort = sort, name = name)
+  out <- group_by(out, !!!syms(group_vars(.data)))
+  out
 }
 
 #' @importFrom dplyr tally
 #' @export
 tally.dtplyr_step <- function(.data, wt = NULL, sort = FALSE, name = NULL) {
+  tally_count(.data, {{ wt }}, sort, name, "drop_last")
+}
+
+# Helpers -----------------------------------------------------------------
+
+tally_count <- function(.data, wt = NULL, sort = FALSE, name = NULL, .groups = "drop_last") {
   wt <- enquo(wt)
   if (quo_is_null(wt)) {
     n <- expr(n())
@@ -41,7 +58,7 @@ tally.dtplyr_step <- function(.data, wt = NULL, sort = FALSE, name = NULL) {
   }
   name <- check_name(name, .data$groups)
 
-  out <- summarise(.data, !!name := !!n)
+  out <- summarise(.data, !!name := !!n, .groups = .groups)
 
   if (sort) {
     out <- arrange(out, desc(!!sym(name)))
@@ -49,14 +66,6 @@ tally.dtplyr_step <- function(.data, wt = NULL, sort = FALSE, name = NULL) {
 
   out
 }
-
-#' @export
-tally.data.table <- function(.data, ...) {
-  .data <- lazy_dt(.data)
-  tally(.data, ...)
-}
-
-# Helpers -----------------------------------------------------------------
 
 check_name <- function(name, vars) {
   if (is.null(name)) {

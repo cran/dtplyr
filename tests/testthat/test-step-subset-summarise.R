@@ -38,11 +38,31 @@ test_that("summarise peels off layer of grouping", {
   dt <- lazy_dt(data.table(x = 1, y = 1, z = 1))
   gt <- group_by(dt, x, y)
 
-  expect_equal(summarise(gt)$groups, "x")
-  expect_equal(summarise(summarise(gt))$groups, character())
+  suppressMessages({
+    expect_equal(summarise(gt)$groups, "x")
+    expect_equal(summarise(summarise(gt))$groups, character())
+  })
 })
 
-test_that("summarises sorts groups", {
+test_that("works with `.by`", {
+  dt <- lazy_dt(data.table(x = 1:3, y = c("a", "a", "b"), z = c("a", "a", "b")))
+  step <- dt %>%
+    summarize(first_x = first(x), .by = c(y, z))
+
+  expect_equal(as_tibble(step), tibble(y = c("a", "b"), z = c("a", "b"), first_x = c(1, 3)))
+  expect_true(length(step$groups) == 0)
+})
+
+test_that("works with `.by` and no dots", {
+  dt <- lazy_dt(data.table(x = 1:3, y = c("a", "a", "b"), z = c("a", "a", "b")))
+  step <- dt %>%
+    summarize(.by = c(y, z))
+
+  expect_equal(as_tibble(step), tibble(y = c("a", "b"), z = c("a", "b")))
+  expect_true(length(step$groups) == 0)
+})
+
+test_that("summarise sorts groups", {
   dt <- lazy_dt(data.table(x = 2:1))
   expect_equal(
     dt %>% group_by(x) %>% summarise(n = n()) %>% pull(x),
@@ -83,7 +103,6 @@ test_that("summarise(.groups=)", {
     expr(lazy_dt(data.frame(x = 1, y = 2), "DT") %>% group_by(x, y) %>% dplyr::summarise() %>% show_query()),
     env(global_env())
   ))
-  skip_if(utils::packageVersion("rlang") < "0.5.0")
   expect_snapshot(eval_bare(
     expr(lazy_dt(data.frame(x = 1, y = 2), "DT") %>% group_by(x, y) %>% dplyr::summarise() %>% show_query()),
     env(global_env())
@@ -96,7 +115,7 @@ test_that("summarise(.groups=)", {
   ))
 
   df <- lazy_dt(data.table(x = 1, y = 2), "DT") %>% group_by(x, y)
-  expect_equal(df %>% summarise() %>% group_vars(), "x")
+  suppressMessages(expect_equal(df %>% summarise() %>% group_vars(), "x"))
   expect_equal(df %>% summarise(.groups = "drop_last") %>% group_vars(), "x")
   expect_equal(df %>% summarise(.groups = "drop") %>% group_vars(), character())
   expect_equal(df %>% summarise(.groups = "keep") %>% group_vars(), c("x", "y"))
