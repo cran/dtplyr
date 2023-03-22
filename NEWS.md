@@ -1,3 +1,9 @@
+# dtplyr 1.3.1
+
+* Fix for failing R CMD check.
+
+* `dtplyr` no longer directly depends on `crayon`.
+
 # dtplyr 1.3.0
 
 ## Breaking changes
@@ -61,7 +67,7 @@
 * `mutate()`/`summarize()` correctly translates anonymous functions (#362).
 
 * `mutate()`/`transmute()` now supports `glue::glue()` and `stringr::str_glue()` 
-   without specifiying  `.envir`.
+   without specifying  `.envir`.
 
 * `where()` now clearly errors because dtplyr doesn't support selection 
   by predicate (#271).

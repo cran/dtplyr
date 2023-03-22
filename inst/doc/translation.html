@@ -606,8 +606,8 @@ performs. Given my explorations so far, I’m reasonably confident that
 we’re generating high-quality data.table code, so most of the cost
 should be in the translation itself.</p>
 <p>The following code briefly explores the performance of a few
-different translations. A signficant amount of work is done by the dplyr
-verbs, so we benchmark the whole process.</p>
+different translations. A significant amount of work is done by the
+dplyr verbs, so we benchmark the whole process.</p>
 <div class="sourceCode" id="cb29"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a>bench<span class="sc">::</span><span class="fu">mark</span>(</span>
 <span id="cb29-2"><a href="#cb29-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">filter =</span> dt <span class="sc">%&gt;%</span> <span class="fu">filter</span>(a <span class="sc">==</span> b, c <span class="sc">==</span> d),</span>
 <span id="cb29-3"><a href="#cb29-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">mutate =</span> dt <span class="sc">%&gt;%</span> <span class="fu">mutate</span>(<span class="at">a =</span> a <span class="sc">*</span> <span class="dv">2</span>, <span class="at">a4 =</span> a2 <span class="sc">*</span> <span class="dv">2</span>, <span class="at">a8 =</span> a4 <span class="sc">*</span> <span class="dv">2</span>) <span class="sc">%&gt;%</span> <span class="fu">show_query</span>(),</span>
@@ -617,9 +617,9 @@ verbs, so we benchmark the whole process.</p>
 <span id="cb29-7"><a href="#cb29-7" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt; # A tibble: 3 × 6</span></span>
 <span id="cb29-8"><a href="#cb29-8" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt;   expression      min   median `itr/sec` mem_alloc `gc/sec`</span></span>
 <span id="cb29-9"><a href="#cb29-9" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt;   &lt;bch:expr&gt; &lt;bch:tm&gt; &lt;bch:tm&gt;     &lt;dbl&gt; &lt;bch:byt&gt;    &lt;dbl&gt;</span></span>
-<span id="cb29-10"><a href="#cb29-10" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt; 1 filter        405µs    419µs     2363.    4.75KB     49.2</span></span>
-<span id="cb29-11"><a href="#cb29-11" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt; 2 mutate        542µs    566µs     1745.   14.39KB     46.4</span></span>
-<span id="cb29-12"><a href="#cb29-12" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt; 3 summarise     952µs    985µs     1004.   24.04KB     44.8</span></span></code></pre></div>
+<span id="cb29-10"><a href="#cb29-10" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt; 1 filter        415µs 432.88µs     2256.    4.75KB     46.8</span></span>
+<span id="cb29-11"><a href="#cb29-11" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt; 2 mutate        540µs 573.67µs     1651.   14.39KB     44.2</span></span>
+<span id="cb29-12"><a href="#cb29-12" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt; 3 summarise     967µs   1.01ms      969.   24.04KB     44.9</span></span></code></pre></div>
 <p>These translations all take less than a millisecond, suggesting that
 the performance overhead of dtplyr should be negligible for realistic
 data sizes. Note that dtplyr run-time scales with the complexity of the
