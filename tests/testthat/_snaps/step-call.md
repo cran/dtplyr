@@ -17,12 +17,19 @@
     Output
       setnames(copy(DT), c("a", "b", "c"), toupper)
 
+# can compute distinct computed variables
+
+    Code
+      dt %>% distinct(z = x + y) %>% show_query()
+    Output
+      unique(copy(dt)[, `:=`(z = x + y)][, `:=`(c("x", "y"), NULL)])
+
 # errors are raised
 
     Code
       collect(drop_na(dt, "z"))
     Condition
       Error in `drop_na()`:
-      ! Can't subset columns that don't exist.
+      ! Can't select columns that don't exist.
       x Column `z` doesn't exist.
 

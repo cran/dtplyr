@@ -9,14 +9,15 @@
 \arguments{
 \item{.data}{A \code{\link[=lazy_dt]{lazy_dt()}}.}
 
-\item{...}{<\code{\link[dplyr:dplyr_data_masking]{data-masking}}> Variables, or functions of
-variables. Use \code{\link[dplyr:desc]{desc()}} to sort a variable in descending order.}
+\item{...}{<\code{\link[rlang:args_data_masking]{data-masking}}> Variables, or
+functions of variables. Use \code{\link[dplyr:desc]{desc()}} to sort a variable in descending
+order.}
 
 \item{.by_group}{If \code{TRUE}, will sort first by grouping variable. Applies to
 grouped data frames only.}
 }
 \description{
-This is a method for dplyr generic \code{\link[=arrange]{arrange()}}. It is translated to
+This is a method for dplyr generic \code{\link[dplyr:arrange]{dplyr::arrange()}}. It is translated to
 an \code{\link[=order]{order()}} call in the \code{i} argument of \verb{[.data.table}.
 }
 \examples{

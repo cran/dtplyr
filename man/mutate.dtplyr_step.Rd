@@ -16,7 +16,7 @@
 \arguments{
 \item{.data}{A \code{\link[=lazy_dt]{lazy_dt()}}.}
 
-\item{...}{<\code{\link[dplyr:dplyr_data_masking]{data-masking}}> Name-value pairs.
+\item{...}{<\code{\link[rlang:args_data_masking]{data-masking}}> Name-value pairs.
 The name gives the name of the column in the output.
 
 The value can be:
@@ -56,7 +56,7 @@ should appear (the default is to add to the right hand side). See
 \code{\link[dplyr:relocate]{relocate()}} for more details.}
 }
 \description{
-This is a method for the dplyr \code{\link[=mutate]{mutate()}} generic. It is translated to
+This is a method for the dplyr \code{\link[dplyr:mutate]{dplyr::mutate()}} generic. It is translated to
 the \code{j} argument of \verb{[.data.table}, using \verb{:=} to modify "in place". If
 \code{.before} or \code{.after} is provided, the new columns are relocated with a call
 to \code{\link[data.table:setcolorder]{data.table::setcolorder()}}.

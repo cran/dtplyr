@@ -1,3 +1,34 @@
+# dtplyr 1.3.2
+
+* `R CMD check` fixes
+
+## New features
+
+* `reframe()` is now translated.
+
+* `consecutive_id()` is now mapped to `data.table::rleid()`.
+  Note: `rleid()` only accepts vector inputs and cannot be used with data frame inputs.
+  
+* `case_match()` is now translated to `fcase()`.
+  
+## Minor improvements and bug fixes
+
+* Can use `.data` in `lead()`/`lag()` (#441)
+
+* Can namespace calls to `desc()` (#427).
+
+* `case_when(.default = )` now works.
+
+* `.by` no longer alters grouping in prior steps (#439)
+
+* Arguments to `$` and `[[` calls are no longer prepended with `..`  (#434)
+
+* Grouping now works with non-standard column names (#451)
+
+* `print.dtplyr_step()` gains `n`, `max_extra_cols`, and `max_footer_lines` args (#464)
+
+* `transmute()` preserves row count and avoids unnecessary copies (#470)
+
 # dtplyr 1.3.1
 
 * Fix for failing R CMD check.

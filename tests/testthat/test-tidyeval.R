@@ -33,6 +33,20 @@ test_that("unless we're operating in the global environment", {
   expect_equal(capture_dot(dt, !!quo, j = FALSE), quote(x + n))
 })
 
+test_that("ignores accessor calls, #434", {
+  df <- tibble(length = 1)
+
+  step <- lazy_dt(tibble(x = 1:3), "DT") %>%
+    mutate(y = df$length)
+
+  expect_equal(show_query(step), expr(copy(DT)[, `:=`(y = df$length)]))
+
+  step <- lazy_dt(tibble(x = 1:3), "DT") %>%
+    mutate(y = df[["length"]])
+
+  expect_equal(show_query(step), expr(copy(DT)[, `:=`(y = df[["length"]])]))
+})
+
 test_that("using environment of inlined quosures", {
   dt <- lazy_dt(data.frame(x = 1:10, y = 1:10))
 
@@ -127,17 +141,49 @@ test_that("translates case_when()", {
     quote(fcase(x1, y1, x2, y2, x3, TRUE, rep(TRUE, .N), y4))
   )
 
+  # can use `.default` and `.default` doesn't need to be in last position, #429
+  expect_equal(
+    capture_dot(dt, case_when(x1 ~ y1, x2 ~ y2, .default = y4, x3 ~ TRUE)),
+    quote(fcase(x1, y1, x2, y2, x3, TRUE, rep(TRUE, .N), y4))
+  )
+
   # translates recursively
   expect_equal(
     capture_dot(dt, case_when(x == 1 ~ n())),
     quote(fcase(x == 1, .N))
+  )
+
+  # Errors on `.ptype`
+  expect_error(
+    capture_dot(dt, case_when(x1 ~ y1, .ptype = double()))
+  )
+
+  # Errors on `.size`
+  expect_error(
+    capture_dot(dt, case_when(x1 ~ y1, .size = 1))
+  )
+})
+
+test_that("translates case_match()", {
+  dt <- lazy_dt(data.frame(x = 1:5))
+
+  # Works without `.default`
+  expect_equal(
+    capture_dot(dt, case_match(x, c(1, 2) ~ 1, 3 ~ 2)),
+    quote(fcase(x %in% c(1, 2), 1, x == 3, 2))
+  )
+
+  # Works with `.default`
+  expect_equal(
+    capture_dot(dt, case_match(x, c(1, 2) ~ 1, 3 ~ 2, .default = 3)),
+    quote(fcase(x %in% c(1, 2), 1, x == 3, 2, rep(TRUE, .N), 3))
   )
 })
 
 test_that("translates lag()/lead()", {
   df <- data.frame(x = 1:5, y = 1:5)
   expect_equal(
-    capture_dot(df, lag(x)),
+    capture_dot(df, lag(.data$x)),
     expr(shift(x, type = "lag"))
   )
   expect_equal(
@@ -204,6 +250,14 @@ test_that("properly handles anonymous functions, #362", {
   expect_equal(
     capture_dot(df, sapply(a, function(x) x + n())),
     quote(sapply(a, function(x) x + .N))
+  )
+})
+
+test_that("translates `consecutive_id()`", {
+  df <- data.frame(x = 1:5, y = 1:5)
+  expect_equal(
+    capture_dot(df, consecutive_id(x, y)),
+    expr(rleid(x, y))
   )
 })
 
@@ -334,6 +388,13 @@ test_that("non-Gforce verbs work", {
 test_that("`desc(col)` is translated to `-col` inside arrange", {
   dt <- lazy_dt(data.table(x = c("a", "b")), "DT")
   step <- arrange(dt, desc(x))
+  out <- collect(step)
+
+  expect_equal(show_query(step), expr(DT[order(-x)]))
+  expect_equal(out$x, c("b", "a"))
+
+  # Can namespace `desc()`
+  step <- arrange(dt, dplyr::desc(x))
   out <- collect(step)
 
   expect_equal(show_query(step), expr(DT[order(-x)]))

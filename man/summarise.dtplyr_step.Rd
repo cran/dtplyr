@@ -9,8 +9,8 @@
 \arguments{
 \item{.data}{A \code{\link[=lazy_dt]{lazy_dt()}}.}
 
-\item{...}{<\code{\link[dplyr:dplyr_data_masking]{data-masking}}> Name-value pairs of summary
-functions. The name will be the name of the variable in the result.
+\item{...}{<\code{\link[rlang:args_data_masking]{data-masking}}> Name-value pairs of
+summary functions. The name will be the name of the variable in the result.
 
 The value can be:
 \itemize{
@@ -51,7 +51,7 @@ the option "dplyr.summarise.inform" is set to \code{FALSE},
 or when \code{summarise()} is called from a function in a package.}
 }
 \description{
-This is a method for the dplyr \code{\link[=summarise]{summarise()}} generic. It is translated to
+This is a method for the dplyr \code{\link[dplyr:summarise]{dplyr::summarise()}} generic. It is translated to
 the \code{j} argument of \verb{[.data.table}.
 }
 \examples{

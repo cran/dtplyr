@@ -9,9 +9,10 @@
 \arguments{
 \item{x}{A \code{\link[=lazy_dt]{lazy_dt()}}}
 
-\item{...}{<\code{\link[dplyr:dplyr_data_masking]{data-masking}}> Variables to group by.}
+\item{...}{<\code{\link[rlang:args_data_masking]{data-masking}}> Variables to group
+by.}
 
-\item{wt}{<\code{\link[dplyr:dplyr_data_masking]{data-masking}}> Frequency weights.
+\item{wt}{<\code{\link[rlang:args_data_masking]{data-masking}}> Frequency weights.
 Can be \code{NULL} or a variable:
 \itemize{
 \item If \code{NULL} (the default), counts the number of rows in each group.
@@ -27,7 +28,7 @@ it will use \code{nn}. If there's a column called \code{n} and \code{nn}, it'll 
 \code{nnn}, and so on, adding \code{n}s until it gets a new name.}
 }
 \description{
-This is a method for the dplyr \code{\link[=count]{count()}} generic. It is translated using
+This is a method for the dplyr \code{\link[dplyr:count]{dplyr::count()}} generic. It is translated using
 \code{.N} in the \code{j} argument, and supplying groups to \code{keyby} as appropriate.
 }
 \examples{

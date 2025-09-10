@@ -16,7 +16,7 @@ dt_eval <- function(x) {
 dt_funs <- c(
   "between", "CJ", "copy", "data.table", "dcast", "melt", "nafill",
   "fcase", "fcoalesce", "fifelse", "fintersect", "frank", "frankv", "fsetdiff", "funion",
-  "setcolorder", "setnames", "setorder", "shift", "tstrsplit", "uniqueN"
+  "rleid", "setcolorder", "setnames", "setorder", "shift", "tstrsplit", "uniqueN"
 )
 dt_symbols <- c(".SD", ".BY", ".N", ".I", ".GRP", ".NGRP")
 add_dt_wrappers <- function(env) {
@@ -30,7 +30,7 @@ globalVariables(dt_funs)
 
 capture_dots <- function(.data, ..., .j = TRUE, .by = new_by()) {
   if (.by$uses_by) {
-    .data$groups <- .by$names
+    .data <- step_group(.data, .by$names)
   }
 
   dots <- enquos(..., .named = .j)
@@ -47,7 +47,7 @@ capture_dots <- function(.data, ..., .j = TRUE, .by = new_by()) {
 
 capture_new_vars <- function(.data, ..., .by = new_by()) {
   if (.by$uses_by) {
-    .data$groups <- .by$names
+    .data <- step_group(.data, .by$names)
   }
 
   dots <- as.list(enquos(..., .named = TRUE))
@@ -144,7 +144,16 @@ dt_squash_call <- function(x, env, data, j = TRUE) {
     call2("fcoalesce", !!!args)
   } else if (is_call(x, "case_when")) {
     # case_when(x ~ y) -> fcase(x, y)
-    args <- unlist(lapply(x[-1], function(x) {
+    call <- call_match(x, dplyr::case_when)
+    args <- call_args(call)
+    if (!is.null(args$.ptype) || !is.null(args$.size)) {
+      abort("`.ptype` and `.size` are not supported in dtplyr case_when")
+    }
+    if (!is.null(args$.default)) {
+      args$.default <- call2("~", quote(rep(TRUE, .N)), args$.default)
+      args <- unname(args)
+    }
+    args <- unlist(lapply(args, function(x) {
       list(
         # Get as "default" case as close as possible
         # https://github.com/Rdatatable/data.table/issues/4258
@@ -154,6 +163,14 @@ dt_squash_call <- function(x, env, data, j = TRUE) {
     }))
     args <- lapply(args, dt_squash, env = env, data = data, j = j)
     call2("fcase", !!!args)
+  } else if (is_call(x, "case_match")) {
+    x <- call_match(x, dplyr::case_match, dots_expand = FALSE)
+    args <- call_args(x)
+    .x <- args$.x
+    dots <- args$...
+    dots <- map(dots, prep_case_match_dot, .x)
+    call <- call2("case_when", !!!dots, .default = args$.default)
+    dt_squash_call(call, env, data, j = j)
   } else if (is_call(x, "cur_data")) {
     quote(.SD)
   } else if (is_call(x, "cur_data_all")) {
@@ -171,9 +188,9 @@ dt_squash_call <- function(x, env, data, j = TRUE) {
     x
   } else if (is_call(x, c("if_else", "ifelse"))) {
     if (is_call(x, "if_else")) {
-      x <- unname(match.call(dplyr::if_else, x))
+      x <- unname(call_match(x, dplyr::if_else))
     } else {
-      x <- unname(match.call(ifelse, x))
+      x <- unname(call_match(x, ifelse))
     }
 
     x[[1]] <- quote(fifelse)
@@ -182,31 +199,31 @@ dt_squash_call <- function(x, env, data, j = TRUE) {
   } else if (is_call(x, c("lag", "lead"))) {
     if (is_call(x, "lag")) {
       type <- "lag"
-      call <- match.call(dplyr::lag, x)
     } else {
       type <- "lead"
-      call <- match.call(dplyr::lead, x)
     }
-    call[-1] <- lapply(call[-1], dt_squash, env = env, data = data, j = j)
+    x <- call_match(x, dplyr::lag)
+    x[-1] <- lapply(x[-1], dt_squash, env = env, data = data, j = j)
 
-    shift_call <- call2("shift", x[[2]])
-    if (!is_null(call$n)) {
-      shift_call$n <- call$n
+    args <- call_args(x)
+    call <- call2("shift", args[[1]])
+    if (!is_null(args$n)) {
+      call$n <- args$n
     }
-    if (!is_null(call$default)) {
-      shift_call$fill <- call$default
+    if (!is_null(args$default)) {
+      call$fill <- args$default
     }
-    if (!is_null(call$order_by)) {
+    if (!is_null(args$order_by)) {
       abort(
         glue::glue("The `order_by` argument of `{type}()` is not supported by dtplyr")
       )
     }
-    shift_call$type <- type
-    shift_call
+    call$type <- type
+    call
   } else if (is_call(x, "n", n = 0)) {
     quote(.N)
   } else if (is_call(x, "n_distinct")) {
-    x <- match.call(dplyr::n_distinct, x, expand.dots = FALSE)
+    x <- call_match(x, dplyr::n_distinct, dots_expand = FALSE)
     dots <- x$...
     if (length(dots) == 1) {
       vec <- dots[[1]]
@@ -249,6 +266,12 @@ dt_squash_call <- function(x, env, data, j = TRUE) {
       call$.envir <- quote(.SD)
     }
     call
+  } else if (is_call(x, "consecutive_id")) {
+    x[[1]] <- expr(rleid)
+    x[-1] <- lapply(x[-1], dt_squash, env, data, j = j)
+    x
+  } else if (is_call(x, c("$", "[["))) {
+    x
   } else {
     x[-1] <- lapply(x[-1], dt_squash, env, data, j = j)
     x
@@ -332,8 +355,20 @@ fun_name <- function(fun) {
 }
 
 check_one_arg <- function(x) {
-  fun <- as_name(x[[1]])
-  if (!has_length(x, 2L)) {
+  fun <- call_name(x)
+  args <- call_args(x)
+  if (!has_length(args, 1L)) {
     abort(glue("`{fun}()` expects exactly one argument."))
   }
+}
+
+prep_case_match_dot <- function(dot, .x) {
+  lhs <- f_lhs(dot)
+  if (is.character(lhs) || is.numeric(lhs)) {
+    lhs <- call2("==", .x, lhs)
+  } else {
+    lhs <- call2("%in%", .x, lhs)
+  }
+  f_lhs(dot) <- lhs
+  dot
 }
