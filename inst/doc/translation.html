@@ -344,7 +344,7 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 <div id="introduction" class="section level2">
 <h2>Introduction</h2>
 <p>This vignette shows the details of how dtplyr translates dplyr
-expressions into the equivalent <a href="http://r-datatable.com/">data.table</a> code. If you see places
+expressions into the equivalent <a href="https://r-datatable.com/">data.table</a> code. If you see places
 where you think I could generate better data.table code, please <a href="https://github.com/tidyverse/dtplyr/issues">let me know</a>!</p>
 <p>This document assumes that you’re familiar with the basics of
 data.table; if you’re not, I recommend starting at
@@ -620,9 +620,9 @@ dplyr verbs, so we benchmark the whole process.</p>
 <span id="cb29-7"><a href="#cb29-7" tabindex="-1"></a><span class="co">#&gt; # A tibble: 3 × 6</span></span>
 <span id="cb29-8"><a href="#cb29-8" tabindex="-1"></a><span class="co">#&gt;   expression      min   median `itr/sec` mem_alloc `gc/sec`</span></span>
 <span id="cb29-9"><a href="#cb29-9" tabindex="-1"></a><span class="co">#&gt;   &lt;bch:expr&gt; &lt;bch:tm&gt; &lt;bch:tm&gt;     &lt;dbl&gt; &lt;bch:byt&gt;    &lt;dbl&gt;</span></span>
-<span id="cb29-10"><a href="#cb29-10" tabindex="-1"></a><span class="co">#&gt; 1 filter        206µs    229µs     4301.    3.25KB     60.1</span></span>
-<span id="cb29-11"><a href="#cb29-11" tabindex="-1"></a><span class="co">#&gt; 2 mutate        319µs    365µs     2639.    16.8KB     60.6</span></span>
-<span id="cb29-12"><a href="#cb29-12" tabindex="-1"></a><span class="co">#&gt; 3 summarise     507µs    613µs     1594.   25.35KB     52.5</span></span></code></pre></div>
+<span id="cb29-10"><a href="#cb29-10" tabindex="-1"></a><span class="co">#&gt; 1 filter        222µs    247µs     4035.    3.25KB     54.1</span></span>
+<span id="cb29-11"><a href="#cb29-11" tabindex="-1"></a><span class="co">#&gt; 2 mutate        342µs    375µs     2642.   17.51KB     58.9</span></span>
+<span id="cb29-12"><a href="#cb29-12" tabindex="-1"></a><span class="co">#&gt; 3 summarise     539µs    584µs     1689.   26.17KB     54.6</span></span></code></pre></div>
 <p>These translations all take less than a millisecond, suggesting that
 the performance overhead of dtplyr should be negligible for realistic
 data sizes. Note that dtplyr run-time scales with the complexity of the
